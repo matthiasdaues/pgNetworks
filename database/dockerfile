@@ -1,0 +1,139 @@
+###########################################################################
+#
+# STAGE 1 - Build a postgis with h3
+#
+
+
+FROM postgres:15-bullseye as builder
+
+
+WORKDIR /app
+
+
+# BUILD VARIABLES FOR FIRST STAGE
+
+# PostgreSQL Major Version
+ENV PG_MAJOR 15
+
+# Postgis
+ENV POSTGIS_MAJOR 3
+ENV POSTGIS_VERSION 3.3.3+dfsg-1.pgdg110+1
+
+# cmake version
+ENV CMAKE_VERSION 3.22.2
+
+# h3 bindings for postgres version
+ENV H3_VERSION 'h3=4.1.2'
+
+
+# Define build tools
+
+ENV BUILD_TOOLS="gcc libtool git python-setuptools postgresql-server-dev-$PG_MAJOR make wget \
+                 build-essential checkinstall zlib1g-dev libssl-dev"
+
+
+# Update apt and install required PostgreSQL-Extensions
+
+RUN apt-get update \
+      && apt-cache showpkg postgresql-$PG_MAJOR-postgis-$POSTGIS_MAJOR \
+      && apt-get install -y --no-install-recommends \
+           postgresql-$PG_MAJOR-postgis-$POSTGIS_MAJOR=$POSTGIS_VERSION \
+           postgresql-$PG_MAJOR-postgis-$POSTGIS_MAJOR-scripts \
+           python3 \
+           python3-pip \
+           $BUILD_TOOLS
+
+
+# # Provide cmake to compile h3-pg later on
+
+ADD https://github.com/Kitware/CMake/releases/download/v3.22.2/cmake-3.22.2.tar.gz .
+RUN tar -zxvf cmake-3.22.2.tar.gz
+RUN cd cmake-3.22.2 
+RUN ./cmake-3.22.2/bootstrap
+RUN make 
+RUN make install
+
+
+# Install H3
+
+RUN pip install pgxnclient \
+   && /usr/local/bin/pgxn install h3
+
+
+# Collect the installed files into a tar archive for use in stage 2
+
+RUN find /usr/lib/postgresql/15/lib/ -name "h3*" -exec tar -rvPf /app/h3_files.tar {} + 
+RUN find /usr/share/postgresql/15/extension/ -name "h3*" -exec tar -rvPf /app/h3_files.tar {} +
+
+
+###########################################################################
+#
+# STAGE 2 - Create PostGIS image with pgRouting, PLPython3u and H3-bindings
+#
+
+
+FROM postgres:15-bullseye
+LABEL maintainer="Matthias Daues <matthias.daues@datenschoenheit.de>"
+
+
+WORKDIR /app_target
+
+
+# BUILD VARIABLES FOR SECOND STAGE
+
+# PostgreSQL Major Version
+ENV PG_MAJOR 15
+
+# pgRouting
+ENV PGROUTING_MAJOR 3.4
+ENV PGROUTING_VERSION 3.4.2 
+
+# Postgis
+ENV POSTGIS_MAJOR 3
+ENV POSTGIS_VERSION 3.3.3+dfsg-1.pgdg110+1
+
+# geohash-hilbert version
+ENV GHH_VERSION 1.4.0
+
+
+# Update apt and install required PostgreSQL-Extensions
+
+RUN apt-get update \
+      && apt-cache showpkg postgresql-$PG_MAJOR-postgis-$POSTGIS_MAJOR \
+      && apt-get install -y --no-install-recommends \
+           # ca-certificates: for accessing remote raster files;
+           #   fix: https://github.com/postgis/docker-postgis/issues/307
+           ca-certificates \
+           \
+           postgresql-$PG_MAJOR-postgis-$POSTGIS_MAJOR=$POSTGIS_VERSION \
+           postgresql-$PG_MAJOR-postgis-$POSTGIS_MAJOR-scripts \
+           postgresql-$PG_MAJOR-pgrouting \
+           postgresql-contrib \
+           python3 \
+           python3-venv \
+           python3-pip \
+           python3-requests \
+           postgresql-plpython3-$PG_MAJOR
+
+
+# # install geohash-hilbert
+
+RUN pip install geohash-hilbert==$GHH_VERSION
+
+
+# # Install H3
+
+COPY --from=builder /app/h3_files.tar /app_target/h3_files.tar
+RUN tar xPf /app_target/h3_files.tar
+
+
+# create entrypoint to provide the image with initdb-scripts
+
+RUN mkdir -p /docker-entrypoint-initdb.d
+COPY ./initdb-postgis.sh /docker-entrypoint-initdb.d/10_postgis.sh
+
+# TODO: Externalize the pg_hba.conf, pg_ident.conf and postgresql.conf
+# Keep these files in a separate folder in the repository and
+# load the at start up with the command
+# COPY ./conf/*.conf /var/lib/postgresql/data/
+
