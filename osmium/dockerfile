@@ -1,0 +1,92 @@
+# Build instructions for an osmium docker image
+# During build there's a lot of cruft that doesn't do productive work
+# That's why compiling is done in a first stage
+# and the built sources are then copied to a second runner stage
+
+######################################
+#   Stage 1 - build osmium from source
+#
+
+
+FROM debian:latest as builder
+
+
+# Specify the release versions for the build
+
+ENV OSMIUM_VERSION 2.20.0
+ENV OSMIUM_TOOL_VERSION 1.16.0
+ENV PROTOZERO_VERSION 1.6.3
+
+
+# update the sytem and install relevant dependencies / packages
+
+RUN apt-get update && apt-get upgrade && apt-get install -y \
+    wget \
+    rapidjson-dev \
+    libboost-program-options-dev \
+    libbz2-dev \
+    zlib1g-dev \
+    liblz4-dev \
+    libexpat1-dev \
+    cmake \
+    pandoc \
+    libboost-dev \ 
+    libgdal-dev \
+    libproj-dev \
+    doxygen \
+    graphviz \
+    g++ 
+
+
+# Define the working directory for the builder stage
+
+RUN mkdir /var/osmium_builder
+WORKDIR /var/osmium_builder
+
+
+# Download the version specific code sources
+
+RUN wget https://github.com/osmcode/libosmium/archive/v${OSMIUM_VERSION}.tar.gz && \
+    tar xzvf v${OSMIUM_VERSION}.tar.gz && \
+    rm v${OSMIUM_VERSION}.tar.gz && \
+    mv libosmium-${OSMIUM_VERSION} libosmium
+
+RUN wget https://github.com/osmcode/osmium-tool/archive/v${OSMIUM_TOOL_VERSION}.tar.gz && \
+    tar xzvf v${OSMIUM_TOOL_VERSION}.tar.gz && \
+    rm v${OSMIUM_TOOL_VERSION}.tar.gz && \
+    mv osmium-tool-${OSMIUM_TOOL_VERSION} osmium-tool
+
+RUN wget https://github.com/mapbox/protozero/archive/v${PROTOZERO_VERSION}.tar.gz && \
+    tar xzvf v${PROTOZERO_VERSION}.tar.gz && \
+    rm v${PROTOZERO_VERSION}.tar.gz && \
+    mv protozero-${PROTOZERO_VERSION} protozero
+
+
+# Build osmium
+
+RUN cd osmium-tool && mkdir build 
+RUN cd osmium-tool && cd build && cmake ..
+RUN cd osmium-tool && cd build && make
+
+
+# Run standard tests after build and output error messages
+
+RUN cd osmium-tool/build && ctest --output-on-failure
+
+
+################################################
+#   Stage 2 - install osmium on the runner image
+#
+
+FROM debian:latest
+LABEL org.opencontainers.image.authors="matthias.daues@datenschoenheit.de"
+
+
+# Define the working directory for the runner stage
+
+WORKDIR /usr/bin/osmium
+
+
+# Copy osmium to the runner stage
+
+COPY --from=builder /var/osmium_builder/osmium-tool/build /usr/bin/osmium
