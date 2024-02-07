@@ -1,8 +1,11 @@
+#########################################################################
+# pgNetworks - Tools for filtering and parsing osm data
+#
 # Build instructions for an osmium docker image
 # During build there's a lot of cruft that doesn't do productive work
 # That's why compiling is done in a first stage
 # and the built sources are then copied to a second runner stage
-
+#
 # build image with: docker build -t pgnetworks:osmium .
 # remove image with: docker rmi pgnetworks:osmium
 # run the container with shell attached: docker run -ti pgnetworks:osmium
@@ -14,6 +17,8 @@
 
 
 FROM debian:latest as builder
+
+WORKDIR .
 
 
 # Specify the release versions for the build
@@ -43,41 +48,41 @@ RUN apt-get update && apt-get upgrade && apt-get install -y \
     g++ 
 
 
-# Define the working directory for the builder stage
+# Download the version specific code sources and create build directory
 
-RUN mkdir /var/osmium_builder
-WORKDIR /var/osmium_builder
+RUN <<EOF
 
+    mkdir /var/osmium_builder
 
-# Download the version specific code sources
-
-RUN wget https://github.com/osmcode/libosmium/archive/v${OSMIUM_VERSION}.tar.gz && \
+    wget https://github.com/osmcode/libosmium/archive/v${OSMIUM_VERSION}.tar.gz && \
     tar xzvf v${OSMIUM_VERSION}.tar.gz && \
     rm v${OSMIUM_VERSION}.tar.gz && \
     mv libosmium-${OSMIUM_VERSION} libosmium
 
-RUN wget https://github.com/osmcode/osmium-tool/archive/v${OSMIUM_TOOL_VERSION}.tar.gz && \
+    wget https://github.com/osmcode/osmium-tool/archive/v${OSMIUM_TOOL_VERSION}.tar.gz && \
     tar xzvf v${OSMIUM_TOOL_VERSION}.tar.gz && \
     rm v${OSMIUM_TOOL_VERSION}.tar.gz && \
     mv osmium-tool-${OSMIUM_TOOL_VERSION} osmium-tool
 
-RUN wget https://github.com/mapbox/protozero/archive/v${PROTOZERO_VERSION}.tar.gz && \
+    wget https://github.com/mapbox/protozero/archive/v${PROTOZERO_VERSION}.tar.gz && \
     tar xzvf v${PROTOZERO_VERSION}.tar.gz && \
     rm v${PROTOZERO_VERSION}.tar.gz && \
     mv protozero-${PROTOZERO_VERSION} protozero
 
+EOF
 
 # Build osmium
 
-RUN cd osmium-tool && mkdir build 
-RUN cd osmium-tool && cd build && cmake ..
-RUN cd osmium-tool && cd build && make
-RUN cd osmium-tool/build && make install
+RUN <<EOF 
 
+    cd osmium-tool && mkdir build 
+    cd build 
+    cmake ..
+    make
+    ctest --output-on-failure
+    make install
 
-# Run standard tests after build and output error messages
-
-RUN cd osmium-tool/build && ctest --output-on-failure
+EOF
 
 
 # Collect the installed files into a tar archive for use in stage 2
@@ -100,11 +105,16 @@ WORKDIR .
 
 # Copy osmium to the runner stage
 
-COPY --from=builder /var/osmium_builder/osmium.tar ./h3_files.tar
-RUN tar xPf ./h3_files.tar
+COPY --from=builder /var/osmium_builder/osmium.tar ./osmium.tar
+RUN tar xPf ./osmium.tar
 
 
 # Install dependencies im runner stage
 
 RUN apt-get update && apt-get upgrade && apt-get install -y \
     libboost-program-options-dev
+
+
+# Clean up
+
+RUN apt clean && rm -rf /var/lib/apt/lists/*
