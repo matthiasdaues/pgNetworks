@@ -1,0 +1,25 @@
+datasources:
+
+    osm:
+        - https://download.geofabrik.de/europe/germany/bayern-latest.osm.pbf 
+        - https://download.geofabrik.de/europe/germany/baden-wuerttemberg-latest.osm.pbf
+        - https://download.geofabrik.de/europe/germany/rheinland-pfalz-latest.osm.pbf
+        - https://download.geofabrik.de/europe/germany/saarland-latest.osm.pbf
+        - https://download.geofabrik.de/europe/germany/niedersachsen-latest.osm.pbf
+        - https://download.geofabrik.de/europe/germany/mecklenburg-vorpommern-latest.osm.pbf
+        - https://download.geofabrik.de/europe/germany/bremen-latest.osm.pbf
+    
+    open_gov_data:
+        # Sind das alles UTM32 / 25832 formatierte Koordinaten?
+        # Wie viele unterschiedliche Datenformate liegen vor?
+        - https://www.opengeodata.nrw.de/produkte/geobasis/lk/akt/gebref_txt/gebref_EPSG25832_ASCII.zip
+        - https://geoportal.geoportal-th.de/hausko_umr/HK-TH.zip
+        - https://geocloud.landesvermessung.sachsen.de/index.php/s/R8Fm0cbDW2jw5LR/download?path=%2F&files=hk_sn_ascii.zip
+        - https://www.lvermgeo.sachsen-anhalt.de/datei/anzeigen/id/258997,501/gebaeudereferenzen.zip            - https://geobroker.geobasis-bb.de/gbss.php?MODE=GetProductInformation&PRODUCTID=51600a1d-c7a3-4211-aff8-e94fb7dc166d
+        - https://fbinter.stadt-berlin.de/fb/atom/Hauskoordinaten/HKO_EPSG25833.zip
+        # Schleswig-Holstein erzeugt einen Downloadjob per Linkaufruf. Das muss separat automatisiert werden :(
+        - https://geodaten.schleswig-holstein.de/gaialight-sh/_apps/dladownload/multi.php?action=download&job=KF2roA 
+        # Die Hamburger Daten stammen aus dem Jahr 2020. Das ist nicht wirklich aktuell :(
+        - https://daten-hamburg.de/inspire/hh_inspire_adressen_hauskoordinaten/HH_INSPIRE_Adressen_Hauskoordinaten_2020-07-17.zip
+        # TODO: Die hessische Datenquelle steht erst ab 29. Februar wieder zur Verfügung.
+        - https://gds.hessen.de/INTERSHOP/web/WFS/HLBG-Geodaten-Site/de_DE/-/EUR/ViewDownloadcenter-Start?path=Liegenschaftskataster/Hauskoordinaten%20ohne%20Postalische%20Angaben%20(txt)
