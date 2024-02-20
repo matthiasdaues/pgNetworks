@@ -9,10 +9,11 @@
 # and the built sources are then copied to a second runner stage to keep 
 # size nice and small.
 #
-# build image with: docker build -t pgnetworks:osmium .
-# remove image with: docker rmi pgnetworks:osmium
-# run the container with shell attached: docker run -ti pgnetworks:osmium
+# build image with: docker build -t pgnetworks:osm-tools .
+# remove image with: docker rmi pgnetworks:osm-tools
+# run the container with shell attached: docker run -ti pgnetworks:osm-tools
 # list images: docker image list
+
 
 ##############################################################
 #   Stage 1 - build osmium from source
@@ -21,7 +22,7 @@
 
 FROM alpine:latest as builder
 
-WORKDIR .
+WORKDIR /
 
 
 # Specify the release versions for the build
@@ -56,8 +57,6 @@ RUN apk --no-cache add \
 # Download the version specific code sources and create build directory for osmium
 
 RUN <<EOF
-
-    mkdir /var/osmium_builder
 
     wget https://github.com/osmcode/libosmium/archive/v${OSMIUM_VERSION}.tar.gz && \
     tar xzvf v${OSMIUM_VERSION}.tar.gz && \
@@ -94,12 +93,10 @@ EOF
 
 RUN <<EOF
 
-    mkdir /var/osm2pgsql_builder
-
-    wget https://github.com/osm2pgsql-dev/osm2pgsql/archive/v${OSM2PGSQL_VESRION}.tar.gz && \
-    tar xzvf v${OSM2PGSQL_VESRION}.tar.gz && \
-    rm v${OSM2PGSQL_VESRION}.tar.gz && \
-    mv libosmium-${OSM2PGSQL_VESRION} libosmium
+    wget https://github.com/osm2pgsql-dev/osm2pgsql/archive/${OSM2PGSQL_VESRION}.tar.gz && \
+    tar xzvf ${OSM2PGSQL_VESRION}.tar.gz && \
+    rm ${OSM2PGSQL_VESRION}.tar.gz && \
+    mv osm2pgsql-${OSM2PGSQL_VESRION} osm2pgsql
 
 EOF
 
@@ -116,11 +113,11 @@ RUN <<EOF
 
 EOF
 
+RUN rm -r ./osm2pgsql && rm -r ./osmium-tool
 
 # Collect the installed files into a tar archive for use in stage 2
-RUN apk add tar
-RUN find /usr/local -name "osmium*" -exec tar -rvPf /var/osmium_builder/osmium.tar {} + 
-RUN find /usr/local -name "osm2pgsql*" -exec tar -rvPf /var/osm2pgsql_builder/osm2pgsql.tar {} + 
+RUN find / -name "osmium*" -exec tar -rvf /osmium.tar {} + 
+RUN find / -name "osm2pgsql*" -exec tar -rvf /osm2pgsql.tar {} + 
 
 
 ##############################################################
@@ -133,22 +130,25 @@ LABEL org.opencontainers.image.authors="matthias.daues@datenschoenheit.de"
 
 # Define the working directory for the runner stage
 
-WORKDIR .
-
-
-# Copy osmium and osm2pgsql to the runner stage
-
-COPY --from=builder /var/osmium_builder/osmium.tar ./osmium.tar
-COPY --from=builder /var/osm2pgsql_builder/osm2pgsql.tar ./osm2pgsql.tar
-RUN tar xPf ./osmium.tar
-RUN tar xPf ./osm2pgsql.tar
-
+WORKDIR /
 
 
 # Install dependencies im runner stage
 
 RUN apk --no-cache add \
-        boost-dev
+    boost \
+    postgresql \
+    bash \
+    lua5.3-libs
+
+
+# Copy osmium and osm2pgsql to the runner stage
+
+COPY --from=builder /osmium.tar ./osmium.tar
+COPY --from=builder /osm2pgsql.tar ./osm2pgsql.tar
+
+RUN tar xf ./osmium.tar
+RUN tar xf ./osm2pgsql.tar
 
 
 # Entrypoint
