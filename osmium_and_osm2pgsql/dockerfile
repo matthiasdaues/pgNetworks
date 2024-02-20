@@ -147,8 +147,16 @@ RUN apk --no-cache add \
 COPY --from=builder /osmium.tar ./osmium.tar
 COPY --from=builder /osm2pgsql.tar ./osm2pgsql.tar
 
+
+# Extract to install locations
+
 RUN tar xf ./osmium.tar
 RUN tar xf ./osm2pgsql.tar
+
+
+# clean up 
+
+RUN rm ./osmium.tar &&  rm ./osm2pgsql.tar
 
 
 # Entrypoint
