@@ -1,3 +1,5 @@
 .dbeaver/
 .settings/
 .project
+./data
+./database/setup_database
