@@ -1,0 +1,164 @@
+#########################################################################
+# pgNetworks - Tools for filtering and parsing osm data
+#              and then importing it into a postgis-database
+#
+# Build instructions for a docker image containing osmium and 
+# osm2pgsql based on alpine linux for small image size
+# During build there's a lot of cruft that doesn't do productive work
+# That's why compiling is done in a first stage
+# and the built sources are then copied to a second runner stage to keep 
+# size nice and small.
+#
+# build image with: docker build -t pgnetworks:osm-tools .
+# remove image with: docker rmi pgnetworks:osm-tools
+# run the container with shell attached: docker run -ti pgnetworks:osm-tools
+# list images: docker image list
+
+
+##############################################################
+#   Stage 1 - build osmium from source
+#
+
+
+FROM alpine:latest as builder
+
+WORKDIR /
+
+
+# Specify the release versions for the build
+
+ENV OSMIUM_VERSION 2.20.0
+ENV OSMIUM_TOOL_VERSION 1.16.0
+ENV PROTOZERO_VERSION 1.6.3
+ENV OSM2PGSQL_VESRION 1.11.0
+
+# update the system and install relevant dependencies / packages
+
+RUN apk --no-cache add \
+    tar \
+    cmake \
+    make\
+    g++ \
+    boost-dev \
+    expat-dev \
+    bzip2-dev \
+    zlib-dev \
+    libpq \
+    nlohmann-json \
+    lua5.3-dev \
+    postgresql-dev \
+    wget \
+    gdal-dev \
+    geos-dev \
+    git \
+    sparsehash 
+
+
+# Download the version specific code sources and create build directory for osmium
+
+RUN <<EOF
+
+    wget https://github.com/osmcode/libosmium/archive/v${OSMIUM_VERSION}.tar.gz && \
+    tar xzvf v${OSMIUM_VERSION}.tar.gz && \
+    rm v${OSMIUM_VERSION}.tar.gz && \
+    mv libosmium-${OSMIUM_VERSION} libosmium
+
+    wget https://github.com/osmcode/osmium-tool/archive/v${OSMIUM_TOOL_VERSION}.tar.gz && \
+    tar xzvf v${OSMIUM_TOOL_VERSION}.tar.gz && \
+    rm v${OSMIUM_TOOL_VERSION}.tar.gz && \
+    mv osmium-tool-${OSMIUM_TOOL_VERSION} osmium-tool
+
+    wget https://github.com/mapbox/protozero/archive/v${PROTOZERO_VERSION}.tar.gz && \
+    tar xzvf v${PROTOZERO_VERSION}.tar.gz && \
+    rm v${PROTOZERO_VERSION}.tar.gz && \
+    mv protozero-${PROTOZERO_VERSION} protozero
+
+EOF
+
+# Build osmium
+
+RUN <<EOF 
+
+    cd osmium-tool && mkdir build 
+    cd build 
+    cmake ..
+    make
+    ctest --output-on-failure
+    make install
+
+EOF
+
+
+# Download the version specific code sources and create build directory for osm2pgsql
+
+RUN <<EOF
+
+    wget https://github.com/osm2pgsql-dev/osm2pgsql/archive/${OSM2PGSQL_VESRION}.tar.gz && \
+    tar xzvf ${OSM2PGSQL_VESRION}.tar.gz && \
+    rm ${OSM2PGSQL_VESRION}.tar.gz && \
+    mv osm2pgsql-${OSM2PGSQL_VESRION} osm2pgsql
+
+EOF
+
+# Build osm2pgsql
+
+RUN <<EOF 
+
+    cd osm2pgsql && mkdir build 
+    cd build 
+    cmake ..
+    make
+    ctest --output-on-failure
+    make install
+
+EOF
+
+RUN rm -r ./osm2pgsql && rm -r ./osmium-tool
+
+# Collect the installed files into a tar archive for use in stage 2
+RUN find / -name "osmium*" -exec tar -rvf /osmium.tar {} + 
+RUN find / -name "osm2pgsql*" -exec tar -rvf /osm2pgsql.tar {} + 
+
+
+##############################################################
+#   Stage 2 - install osmium and osm2pgsql on the runner image
+#
+
+FROM alpine:latest
+LABEL org.opencontainers.image.authors="matthias.daues@datenschoenheit.de"
+
+
+# Define the working directory for the runner stage
+
+WORKDIR /
+
+
+# Install dependencies im runner stage
+
+RUN apk --no-cache add \
+    boost \
+    postgresql \
+    bash \
+    lua5.3-libs
+
+
+# Copy osmium and osm2pgsql to the runner stage
+
+COPY --from=builder /osmium.tar ./osmium.tar
+COPY --from=builder /osm2pgsql.tar ./osm2pgsql.tar
+
+
+# Extract to install locations
+
+RUN tar xf ./osmium.tar
+RUN tar xf ./osm2pgsql.tar
+
+
+# clean up 
+
+RUN rm ./osmium.tar &&  rm ./osm2pgsql.tar
+
+
+# Entrypoint
+
+ENTRYPOINT ["/bin/bash"]
