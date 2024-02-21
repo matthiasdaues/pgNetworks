@@ -1,6 +1,17 @@
-###########################################################################
+##################################################################################
+# pgNetworks - postGIS database extended by the h3 hexagonal grid index
 #
-# STAGE 1 - Build a postgis with h3
+# Build instructions for a docker image containing a postgis db enhanced
+# with the h3 hexagonal index extension.
+#
+# build image with: docker build -t pgnetworks:postgish3 .
+# remove image with: docker rmi pgnetworks:postgish3
+# run the container with shell attached: docker run -ti pgnetworks:postgish3
+# list images: docker image list
+
+
+##################################################################################
+#   Stage 1 - build h3 extension from source
 #
 
 
@@ -66,9 +77,9 @@ RUN find /usr/lib/postgresql/ -name "h3*" -exec tar -rvPf /app/h3_files.tar {} +
 RUN find /usr/share/postgresql/ -name "h3*" -exec tar -rvPf /app/h3_files.tar {} +
 
 
-###########################################################################
+##################################################################################
 #
-# STAGE 2 - Create PostGIS image with pgRouting, PLPython3u and H3-bindings
+# STAGE 2 - Create PostGIS image and install pgRouting, PLPython3u and H3-bindings
 #
 
 
@@ -130,4 +141,3 @@ RUN tar xPf /app_target/h3_files.tar
 # Keep these files in a separate folder in the repository and
 # load the at start up with the command
 # COPY ./conf/*.conf /var/lib/postgresql/data/
-
