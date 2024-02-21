@@ -1,0 +1,13 @@
+version: "3.8"
+
+networks:
+  pgnetwork:
+
+volumes:
+  staging_area:
+
+services:
+  osm-tools:
+    image: "ghcr.io/matthiasdaues/pgnetworks/osm-tools:latest"
+
+
