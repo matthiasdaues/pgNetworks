@@ -6,3 +6,8 @@
 *.zip
 *.pbf
 *.log
+*.txt
+
+# file types of ancillary stuff
+*.qgs
+*.qgz
