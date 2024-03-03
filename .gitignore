@@ -1,3 +1,7 @@
 .dbeaver/
 .settings/
 .project
+
+# file types of downloaded data files
+*.zip
+*.pbf
