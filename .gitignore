@@ -5,3 +5,4 @@
 # file types of downloaded data files
 *.zip
 *.pbf
+*.log
