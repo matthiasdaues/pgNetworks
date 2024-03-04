@@ -1,6 +1,7 @@
 .dbeaver/
 .settings/
 .project
+notes/
 
 # file types of downloaded data files
 *.zip
