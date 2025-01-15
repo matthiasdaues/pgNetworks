@@ -11,13 +11,20 @@ convert geographic data like address coordinates or other points of interest and
       1. Vertex Data Model
       2. Linestring staging table
 
+2. Preliminary Processing
+   1. join vertices to edges
+   2. snap the joint vertices into the edge linestring
+   3. segmentize the linestrings
+   4. calculate the vertices' cardinality
+
 2. Create Graph
-   1. Create connections between vertices and lines
-   2. Segmentize linestrings into "true" edges
-   3. Dissolve edges over nodes with degree 2
+   1. Dissolve edges over nodes with degree 2 and
+   2. join the original geometries
 
 3. Create ancillary functions 
    1. selector structures for parallel processing
+
+4. Model demo usecases
    2. routing scenarios modeled as materialized views
    3. tbd
    
