@@ -3,7 +3,7 @@
 
 -- name: create_procedure_join_vertex_2_edge$
 create or replace procedure pgnetworks_staging.join_vertex_2_edge(lower_bound bigint, upper_bound bigint)
-language pspgsql
+language plpgsql
 as $procedure$
 --do $$
 declare
@@ -13,8 +13,8 @@ declare
     duration interval;
     vertex_id_array bigint[];
     vertex_id bigint;  
-    lower_bound bigint; -- := 2595910006465660600;
-    upper_bound bigint; -- := 2595913045157100801;--2595912533134594922 --(100);--2595913045157100801 --(1000);--2595940121573209691 --(10000);-- 2595959187942176414 --(100000);    
+--    lower_bound bigint := 2595910006465660600;
+--    upper_bound bigint := 2595913045157100801;--2595912533134594922 --(100);--2595913045157100801 --(1000);--2595940121573209691 --(10000);-- 2595959187942176414 --(100000);    
     vertex_geom geometry(point,4326);
     buffer_distance int;
     buffer_geom geometry(polygon,4326);
