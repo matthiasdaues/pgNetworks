@@ -23,6 +23,7 @@ declare
     access record;
 begin
     truncate table pgnetworks_staging.vertex_2_edge;
+    alter sequence pgnetworks_staging.vertex_2_edge_id_seq restart with 1;
     -- set start time
     start_time := clock_timestamp();
     raise notice 'starting process at %', start_time;
@@ -61,13 +62,21 @@ begin
         with closest_point as (
             select st_closestpoint(closest.edge_geom,vertex_geom) as closest_point_geom
         )
+        , edge_dump_array as (
+            select array_agg(ed.edge_dump) as edge_dump_array 
+              from (
+                select (st_dumppoints(closest.edge_geom)).geom as edge_dump
+                ) ed
+        )
         select into access
                vertex_id
              , closest.edge_id 
              , ghh_encode(st_x(cp.closest_point_geom)::numeric(10,7),st_y(cp.closest_point_geom)::numeric(10,7)) as closest_point_id
-          from closest_point cp;           
-    execute format('insert into pgnetworks_staging.vertex_2_edge (vertex_id, closest_point_id, edge_id) values ($1, $2, $3)')
-    using access.vertex_id, access.closest_point_id, access.edge_id; 
+             , cp.closest_point_geom
+             , case when cp.closest_point_geom = ANY(eda.edge_dump_array) then false else true end as new_point
+          from closest_point cp, edge_dump_array eda;
+    execute format('insert into pgnetworks_staging.vertex_2_edge (vertex_id, closest_point_id, closest_point_geom, edge_id, new_point) values ($1, $2, $3, $4, $5)')
+    using access.vertex_id, access.closest_point_id, access.closest_point_geom, access.edge_id, access.new_point; 
     end loop;
     -- close batch processing    
     end_time := clock_timestamp();
