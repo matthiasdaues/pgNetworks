@@ -13,8 +13,6 @@ declare
     duration interval;
     vertex_id_array bigint[];
     vertex_id bigint;  
---    lower_bound bigint := 2595910006465660600;
---    upper_bound bigint := 2595913045157100801;--2595912533134594922 --(100);--2595913045157100801 --(1000);--2595940121573209691 --(10000);-- 2595959187942176414 --(100000);    
     vertex_geom geometry(point,4326);
     buffer_distance int;
     buffer_geom geometry(polygon,4326);
@@ -22,8 +20,6 @@ declare
     -- result variables
     access record;
 begin
-    truncate table pgnetworks_staging.vertex_2_edge;
-    alter sequence pgnetworks_staging.vertex_2_edge_id_seq restart with 1;
     -- set start time
     start_time := clock_timestamp();
     raise notice 'starting process at %', start_time;
@@ -55,6 +51,7 @@ begin
             if 
                 closest.edge_id is not null then exit;
             end if;
+            -- maybe limit the buffer distance
             buffer_distance := buffer_distance * 5;
             end;
         end loop;
@@ -77,6 +74,8 @@ begin
           from closest_point cp, edge_dump_array eda;
     execute format('insert into pgnetworks_staging.vertex_2_edge (vertex_id, closest_point_id, closest_point_geom, edge_id, new_point) values ($1, $2, $3, $4, $5)')
     using access.vertex_id, access.closest_point_id, access.closest_point_geom, access.edge_id, access.new_point; 
+    execute format('insert into pgnetworks_staging.segments (edge_id, node_1, node_2, geom) values ($1, $2, $3, $4)')
+    using -1, access.vertex_id, access.closest_point_id, st_makeline(vertex_geom, access.closest_point_geom); 
     end loop;
     -- close batch processing    
     end_time := clock_timestamp();

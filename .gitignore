@@ -2,6 +2,10 @@
 .settings/
 .project
 notes/
+presentation/
+
+# files with secrets
+.env
 
 # file types of downloaded data files
 *.zip
