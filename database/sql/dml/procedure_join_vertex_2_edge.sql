@@ -1,16 +1,18 @@
 -- this procedure processes vertices and
 -- creates the closest points on the closest edge
 
--- name: create_procedure_join_vertex_2_edge$
-create or replace procedure pgnetworks_staging.join_vertex_2_edge(lower_bound bigint, upper_bound bigint)
+-- name: create_procedure_join_vertex_2_edge#
+create or replace procedure pgnetworks_staging.join_vertex_2_edge(lower_bound bigint, chunk_size int)
 language plpgsql
 as $procedure$
 --do $$
 declare
-    -- process variables
+    -- log variables
     start_time timestamptz;
     end_time timestamptz;
-    duration interval;
+    duration interval; -- informationally redundant. will be removed.
+    log_row record;
+    -- process variables
     vertex_id_array bigint[];
     vertex_id bigint;  
     vertex_geom geometry(point,4326);
@@ -25,10 +27,17 @@ begin
     raise notice 'starting process at %', start_time;
     -- begin batch processing
     -- collect the id-array specified by lower and upper bound
+    with id_list as (
+        select id
+          from _02_kubus.vertices_addresses
+         where id >= lower_bound 
+         order by id asc
+         limit chunk_size
+    )
     select into vertex_id_array
            array_agg(id)
-      from _02_kubus.vertices_addresses
-     where id between lower_bound and upper_bound;
+      from id_list
+     ;
     -- loop through the id array
     foreach vertex_id in array vertex_id_array
     loop
@@ -83,9 +92,8 @@ begin
     duration := end_time - start_time;
     raise notice 'duration: %', duration;
 end 
---$$;
 $procedure$;
 
 
--- name: drop_procedure_join_vertex_2_edge$
+-- name: drop_procedure_join_vertex_2_edge#
 drop procedure pgnetworks_staging.join_vertex_2_edge(bigint, bigint);
