@@ -8,6 +8,9 @@ create table pgnetworks_staging.segments (
     geom geometry(linestring,4326)
 );
 
+-- name: create_index_segments_geom_idx#
+create index segments_geom_idx on pgnetworks_staging.segments using gist (geom);
+
 -- name: drop_table_segments#
 drop table pgnetworks_staging.segments;
 

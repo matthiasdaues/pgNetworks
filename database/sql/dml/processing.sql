@@ -2,6 +2,25 @@
 -- which create the graph assets
 -- from the imported data
 
+-- name: find_bounds_in_road_network_table
+with ordered_rows as (
+    select id
+         , row_number() over (order by id asc) as rn
+      from osm.road_network 
+    )
+,   ordered_bounds as (
+    select id
+    from ordered_rows 
+    where mod((rn-1),:chunk_size) = 0
+    union 
+    select id
+    from osm.road_network
+    where id = (select max(id) from osm.road_network)
+    )
+select * from ordered_bounds order by id asc 
+;
+
+
 -- name: find_bounds_in_poi_table
 with ordered_rows as (
     select id
@@ -32,16 +51,11 @@ select * from ordered_bounds order by id asc
 
 
 -- name: join_vertex_2_edge
-call pgnetworks_staging.join_vertex_2_edge(%s, %s);
-
-
--- name: create_indices_on_vertex_2_edge#
-create index vertex_2_edge_edge_id_idx on pgnetworks_staging.vertex_2_edge using btree (edge_id);
+call pgnetworks_staging.join_vertex_2_edge(%s, %s, %s, %s);
 
 
 -- name: find_bounds_in_vertex_2_edge
--- TODO: Muss die Bounds über die distinkten edge_id's erzeugen, um Dopplungen beim Prozessieren zu vermeiden.
---with distinct_edge_ids as 
+-- DONE: Muss die Bounds über die distinkten edge_id's erzeugen, um Dopplungen beim Prozessieren zu vermeiden.
 with edge_ids as (
     select distinct(edge_id)
       from pgnetworks_staging.vertex_2_edge
@@ -67,4 +81,4 @@ select max(id) from ordered_rows
 
 
 -- name: process_junctions_and_edges
-call pgnetworks_staging.process_junctions_and_edges(%s, %s);
+call pgnetworks_staging.process_junctions_and_edges(%s, %s, %s, %s);

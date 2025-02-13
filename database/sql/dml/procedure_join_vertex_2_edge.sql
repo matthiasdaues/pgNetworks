@@ -2,16 +2,18 @@
 -- creates the closest points on the closest edge
 
 -- name: create_procedure_join_vertex_2_edge#
-create or replace procedure pgnetworks_staging.join_vertex_2_edge(lower_bound bigint, chunk_size int)
+create or replace procedure pgnetworks_staging.join_vertex_2_edge(lower_bound bigint, upper_bound bigint, chunk_size int, run_id int)
 language plpgsql
 as $procedure$
 --do $$
 declare
     -- log variables
+    log_level text;
+    work_step text;
     start_time timestamptz;
     end_time timestamptz;
-    duration interval; -- informationally redundant. will be removed.
-    log_row record;
+    item_count int;
+    message text;
     -- process variables
     vertex_id_array bigint[];
     vertex_id bigint;  
@@ -24,20 +26,21 @@ declare
 begin
     -- set start time
     start_time := clock_timestamp();
-    raise notice 'starting process at %', start_time;
+    work_step := 'join_vertex_2_edge';
     -- begin batch processing
     -- collect the id-array specified by lower and upper bound
     with id_list as (
         select id
           from _02_kubus.vertices_addresses
-         where id >= lower_bound 
+         where id >= lower_bound
+           and id < upper_bound 
          order by id asc
-         limit chunk_size
     )
     select into vertex_id_array
            array_agg(id)
       from id_list
      ;
+    item_count := array_length(vertex_id_array, 1);
     -- loop through the id array
     foreach vertex_id in array vertex_id_array
     loop
@@ -88,9 +91,8 @@ begin
     end loop;
     -- close batch processing    
     end_time := clock_timestamp();
-    raise notice 'ending process at %', end_time;
-    duration := end_time - start_time;
-    raise notice 'duration: %', duration;
+    execute format('insert into pgnetworks_staging.log (log_level, run_id, start_date, end_date, work_step, lower_bound, upper_bound, chunk_size, item_count, message) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)')
+    using 'INFO', run_id, start_time, end_time, work_step, lower_bound, upper_bound, chunk_size, item_count, ('{"idx":2}')::jsonb;  
 end 
 $procedure$;
 
