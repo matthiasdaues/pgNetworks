@@ -2,18 +2,11 @@
 -- snaps closest points to linestrings, segmentizes linestrings
 
 -- name: create_procedure_process_junctions_and_edges#
-create or replace procedure pgnetworks_staging.process_junctions_and_edges(lower_bound bigint, upper_bound bigint, chunk_size int, run_id int)
+create or replace procedure pgnetworks_staging.process_junctions_and_edges(in lower_bound bigint, upper_bound bigint, chunk_size int, run_id int, out item_count int)
 language plpgsql
 as $procedure$
 --do $$
 declare
-    -- log variables
-    log_level text;
-    work_step text;
-    start_time timestamptz;
-    end_time timestamptz;
-    item_count int;
-    message text;
     -- extraction variables
     edge_data_array pgnetworks_staging.edge_processing[];
     edge_data pgnetworks_staging.edge_processing;
@@ -23,8 +16,8 @@ declare
     -- validation variables
     round_count int;
     -- loading variables
-    segments_array segments_processing[];
-    segment segments_processing;
+    segment pgnetworks_staging.segment_processing;
+    segments_array pgnetworks_staging.segment_processing[];
 begin
     -- set start time
     start_time := clock_timestamp();
@@ -42,7 +35,7 @@ begin
     ,   edge_geom as (
         select rn.id as edge_id
              , rn.geom
-          from osm.road_network rn
+          from pgnetworks_staging.road_network rn
          where id = any (array(select edge_id_array from edge_ids))
     )
     ,   junctions as (
@@ -108,10 +101,10 @@ begin
                         -- this row is defined as the custom data type "segments"
                         -- which allows aggregating multiple datatypes into a heterogenous array
                         edge_id
-                        , ghh_encode(st_x(st_pointn(geom,1))::numeric(10,7),st_y(st_pointn(geom,1))::numeric(10,7)) 
-                        , ghh_encode(st_x(st_pointn(geom,-1))::numeric(10,7),st_y(st_pointn(geom,-1))::numeric(10,7))
+                        , ghh_encode_xy_to_id(st_x(st_pointn(geom,1))::numeric(10,7),st_y(st_pointn(geom,1))::numeric(10,7)) 
+                        , ghh_encode_xy_to_id(st_x(st_pointn(geom,-1))::numeric(10,7),st_y(st_pointn(geom,-1))::numeric(10,7))
                         , geom
-                        )::segments_processing
+                        )::pgnetworks_staging.segment_processing
                     from line_segment_dump where geom is not null
                 )
         );
@@ -121,7 +114,7 @@ begin
                 using segment.edge_id, segment.node_1, segment.node_2, segment.geom;
             end loop;
         -- raise notice '%', segments_array;        
-        execute format('update osm.road_network set segmentized = TRUE where id = $1') 
+        execute format('update pgnetworks_staging.road_network set segmentized = TRUE where id = $1') 
         using edge_data.edge_id;
     end loop;
     -- close batch processing    
@@ -133,4 +126,4 @@ $procedure$;
 
 
 -- name: drop_procedure_process_junctions_and_edges#
-drop procedure pgnetworks_staging.process_junctions_and_edges(bigint, bigint, int);
+drop procedure pgnetworks_staging.process_junctions_and_edges(bigint, bigint, integer, integer);

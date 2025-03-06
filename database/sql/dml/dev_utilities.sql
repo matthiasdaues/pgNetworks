@@ -14,6 +14,7 @@ insert into pgnetworks_staging.log (
     end_date,
     work_step,
     chunk_size,
+    item_count,
     message
 ) values 
 (
@@ -23,6 +24,7 @@ insert into pgnetworks_staging.log (
     :end_date,
     :work_step,
     :chunk_size,
+    :item_count,
     :message
 )
 ;

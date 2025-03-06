@@ -6,7 +6,7 @@
 with ordered_rows as (
     select id
          , row_number() over (order by id asc) as rn
-      from osm.road_network 
+      from pgnetworks_staging.road_network 
     )
 ,   ordered_bounds as (
     select id
@@ -14,8 +14,8 @@ with ordered_rows as (
     where mod((rn-1),:chunk_size) = 0
     union 
     select id
-    from osm.road_network
-    where id = (select max(id) from osm.road_network)
+    from pgnetworks_staging.road_network
+    where id = (select max(id) from pgnetworks_staging.road_network)
     )
 select * from ordered_bounds order by id asc 
 ;
@@ -23,18 +23,18 @@ select * from ordered_bounds order by id asc
 
 -- name: find_bounds_in_poi_table
 with ordered_rows as (
-    select id
-         , row_number() over (order by id asc) as rn
-      from _02_kubus.vertices_addresses 
+    select location_id as id
+         , row_number() over (order by location_id asc) as rn
+      from pgnetworks_staging.terminals 
     )
 ,   ordered_bounds as (
     select id
     from ordered_rows 
     where mod((rn-1),:chunk_size) = 0
     union 
-    select id
-    from _02_kubus.vertices_addresses
-    where id = (select max(id) from _02_kubus.vertices_addresses)
+    select location_id as id
+    from pgnetworks_staging.terminals
+    where location_id = (select max(location_id) from pgnetworks_staging.terminals)
     )
 select * from ordered_bounds order by id asc 
 ;
@@ -44,14 +44,20 @@ select * from ordered_bounds order by id asc
  select :lower_bound as lower_bound
       , :upper_bound as upper_bound 
       , count(*) as count
-   from _02_kubus.vertices_addresses
-  where id >= :lower_bound
-    and id < :upper_bound
+   from pgnetworks_staging.terminals
+  where location_id >= :lower_bound
+    and location_id < :upper_bound
 ;
 
 
--- name: join_vertex_2_edge
-call pgnetworks_staging.join_vertex_2_edge(%s, %s, %s, %s);
+-- name: join_vertex_2_edge$
+with item_count as (
+    select call_join_vertex_2_edge as item_count 
+      from pgnetworks_staging.call_join_vertex_2_edge(%s, %s)
+    )
+select item_count 
+  from item_count 
+;
 
 
 -- name: find_bounds_in_vertex_2_edge

@@ -18,7 +18,7 @@ drop table pgnetworks_staging.segments;
 
 -- create or drop a style mirroring the 
 -- the segments table used in pre-processing
--- name: create_type_segments_processing#
+-- name: create_type_segment_processing#
 create type pgnetworks_staging.segment_processing as (
     edge_id bigint,
     node_1 bigint,
@@ -26,5 +26,5 @@ create type pgnetworks_staging.segment_processing as (
     geom geometry(linestring,4326)
 );
 
--- name: drop_type_segments_processing#
+-- name: drop_type_segment_processing#
 drop type pgnetworks_staging.segment_processing cascade;

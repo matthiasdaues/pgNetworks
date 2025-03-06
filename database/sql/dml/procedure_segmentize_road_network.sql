@@ -41,7 +41,7 @@ begin
     ,   edge_geom as (
         select rn.id as edge_id
              , rn.geom
-          from osm.road_network rn
+          from pgnetworks_staging.road_network rn
          where id = any (array(select edge_id_array from edge_ids))
     )
     ,   junctions as (
@@ -128,5 +128,5 @@ end
 $procedure$;
 
 
--- name: drop_procedure_process_junctions_and_edges#
+-- name: drop_procedure_segmentize_road_network#
 drop procedure pgnetworks_staging.process_junctions_and_edges(bigint, bigint, int);
