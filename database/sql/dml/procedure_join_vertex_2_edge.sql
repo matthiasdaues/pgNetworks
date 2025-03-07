@@ -7,13 +7,6 @@ language plpgsql
 as $procedure$
 --do $$
 declare
-    -- log variables
-    log_level text;
-    work_step text;
-    start_time timestamptz;
-    end_time timestamptz;
---    item_count int;
-    message text;
     -- process variables
     vertex_id_array bigint[];
     vertex_id bigint;  
@@ -21,13 +14,9 @@ declare
     buffer_distance int;
     buffer_geom geometry(polygon,4326);
     closest record;
-    nodes_array bigint[];
     -- result variables
     access record;
 begin
-    -- set start time
-    start_time := clock_timestamp();
-    work_step := 'join_vertex_2_edge';
     -- begin batch processing
     -- collect the id-array specified by lower and upper bound
     with id_list as (
@@ -85,20 +74,12 @@ begin
              , cp.closest_point_geom
              , case when cp.closest_point_geom = ANY(eda.edge_dump_array) then false else true end as new_point
           from closest_point cp, edge_dump_array eda;
---    nodes_array := nodes_array || ARRAY[access.vertex_id, access.closest_point_id];
     execute format('insert into pgnetworks_staging.vertex_2_edge (vertex_id, closest_point_id, closest_point_geom, edge_id, new_point) values ($1, $2, $3, $4, $5)')
     using access.vertex_id, access.closest_point_id, access.closest_point_geom, access.edge_id, access.new_point; 
     execute format('insert into pgnetworks_staging.segments (edge_id, node_1, node_2, geom) values ($1, $2, $3, $4)')
     using -1, access.vertex_id, access.closest_point_id, st_makeline(vertex_geom, access.closest_point_geom); 
     end loop;
     -- close batch processing
---    execute format('insert into pgnetworks_staging.nodes (node_id) select * from unnest($1)') 
---    using nodes_array; 
-    execute format('insert into pgnetworks_staging.nodes (node_id) values ($1), ($2)') 
-    using access.vertex_id, access.closest_point_id; 
-    end_time := clock_timestamp();
---    execute format('insert into pgnetworks_staging.log (log_level, run_id, start_date, end_date, work_step, lower_bound, upper_bound, chunk_size, item_count, message) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)')
---    using 'INFO', run_id, start_time, end_time, work_step, lower_bound, upper_bound, chunk_size, item_count, ('{"idx":2}')::jsonb;  
 end 
 $procedure$;
 

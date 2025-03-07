@@ -10,6 +10,12 @@ create table pgnetworks_staging.segments (
 
 -- name: create_index_segments_geom_idx#
 create index segments_geom_idx on pgnetworks_staging.segments using gist (geom);
+-- name: create_index_segments_node_1_idx#
+create index segments_node_1_idx on pgnetworks_staging.segments using btree (node_1);
+-- name: create_index_segments_node_2_idx#
+create index segments_node_2_idx on pgnetworks_staging.segments using btree (node_2);
+-- name: create_index_segments_edge_id_idx#
+create index segments_edge_id_idx on pgnetworks_staging.segments using btree (edge_id);
 
 -- name: drop_table_segments#
 drop table pgnetworks_staging.segments;

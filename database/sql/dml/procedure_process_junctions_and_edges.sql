@@ -2,7 +2,7 @@
 -- snaps closest points to linestrings, segmentizes linestrings
 
 -- name: create_procedure_process_junctions_and_edges#
-create or replace procedure pgnetworks_staging.process_junctions_and_edges(in lower_bound bigint, upper_bound bigint, chunk_size int, run_id int, out item_count int)
+create or replace procedure pgnetworks_staging.process_junctions_and_edges(in lower_bound bigint, upper_bound bigint, out item_count int)
 language plpgsql
 as $procedure$
 --do $$
@@ -19,9 +19,6 @@ declare
     segment pgnetworks_staging.segment_processing;
     segments_array pgnetworks_staging.segment_processing[];
 begin
-    -- set start time
-    start_time := clock_timestamp();
-    work_step := 'process_junctions_and_edges';
     -- begin batch processing
     -- collect the edge data into an array specified by lower and upper bound
     with edge_ids as (
@@ -117,13 +114,23 @@ begin
         execute format('update pgnetworks_staging.road_network set segmentized = TRUE where id = $1') 
         using edge_data.edge_id;
     end loop;
-    -- close batch processing    
-    end_time := clock_timestamp();
-    execute format('insert into pgnetworks_staging.log (log_level, run_id, start_date, end_date, work_step, lower_bound, upper_bound, chunk_size, item_count, message) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)')
-    using 'INFO', run_id, start_time, end_time, work_step, lower_bound, upper_bound, chunk_size, item_count, ('{"idx":5}')::jsonb;  
+    -- close batch processing
 end 
 $procedure$;
 
+create or replace function pgnetworks_staging.call_process_junctions_and_edges(lower_bound bigint, upper_bound bigint)
+returns int
+language plpgsql
+as $function$
+declare
+    item_count int;
+begin
+    call pgnetworks_staging.process_junctions_and_edges(lower_bound, upper_bound, item_count);
+    return item_count;
+end;
+$function$;
+
 
 -- name: drop_procedure_process_junctions_and_edges#
-drop procedure pgnetworks_staging.process_junctions_and_edges(bigint, bigint, integer, integer);
+drop function pgnetworks_staging.call_process_junctions_and_edges(bigint, bigint);
+drop procedure pgnetworks_staging.process_junctions_and_edges(in bigint, bigint, out int);

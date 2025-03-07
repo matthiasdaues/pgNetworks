@@ -86,5 +86,11 @@ select max(id) from ordered_rows
 ;
 
 
--- name: process_junctions_and_edges
-call pgnetworks_staging.process_junctions_and_edges(%s, %s, %s, %s);
+-- name: process_junctions_and_edges$
+with item_count as (
+    select call_process_junctions_and_edges as item_count 
+      from pgnetworks_staging.call_process_junctions_and_edges(%s, %s)
+    )
+select item_count 
+  from item_count 
+;

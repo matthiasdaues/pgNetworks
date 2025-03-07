@@ -16,12 +16,12 @@ as $function$
         begin
             
             hash      := mod(hilbert_id, 4)::text;
-            remainder := hilbert_id / 4;
+            remainder := hilbert_id // 4;
             raise notice 'hash: %, remainder: %', hash, remainder;
             
             while remainder != 0 loop
                 hash := mod(remainder, 4)::varchar || hash;
-                remainder := remainder / 4;
+                remainder := remainder // 4;
                 raise notice 'hash: %, remainder: %', hash, remainder;
             end loop;
 
@@ -75,7 +75,7 @@ AS $function$
 import geohash_hilbert as ghh
 
 hash      = str(hilbert_id % 4)
-remainder = id // 4
+remainder = hilbert_id // 4
 
 while remainder != 0:
   hash = str(str(int(remainder) % 4) + hash)
