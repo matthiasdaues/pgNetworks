@@ -1,3 +1,20 @@
 .dbeaver/
 .settings/
 .project
+notes/
+presentation/
+scripts/
+archive/
+
+# files with secrets
+.env
+
+# file types of downloaded data files
+*.zip
+*.pbf
+*.log
+*.txt
+
+# file types of ancillary stuff
+*.qgs
+*.qgz

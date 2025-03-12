@@ -28,7 +28,7 @@ ENV PG_MAJOR 16
 
 # Postgis
 ENV POSTGIS_MAJOR 3
-ENV POSTGIS_VERSION 3.4.1+dfsg-1.pgdg110+1
+ENV POSTGIS_VERSION 3.4.2
 
 # cmake version
 ENV CMAKE_VERSION 3.22.2
@@ -83,7 +83,7 @@ RUN find /usr/share/postgresql/ -name "h3*" -exec tar -rvPf /app/h3_files.tar {}
 #
 
 
-FROM postgres:15-bullseye
+FROM postgres:16-bullseye
 LABEL maintainer="Matthias Daues <matthias.daues@datenschoenheit.de>"
 
 
@@ -101,7 +101,7 @@ ENV PGROUTING_VERSION 3.6.1
 
 # Postgis
 ENV POSTGIS_MAJOR 3
-ENV POSTGIS_VERSION 3.4.1+dfsg-1.pgdg110+1
+ENV POSTGIS_VERSION 3.4.2
 
 # geohash-hilbert version
 ENV GHH_VERSION 1.4.0
