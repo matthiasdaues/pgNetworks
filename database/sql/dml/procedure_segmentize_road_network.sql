@@ -1,132 +1,220 @@
--- this procedure processes the input edges / linestrings:
--- snaps closest points to linestrings, segmentizes linestrings
+-- this procedure processes the linestrings still
+-- unsegmentized after snapping the vertices to the network
 
 -- name: create_procedure_segmentize_road_network#
-create or replace procedure pgnetworks_staging.segmentize_road_network(lower_bound bigint, upper_bound bigint, chunk_size int, run_id int)
+create or replace procedure pgnetworks_staging.segmentize_road_network(in selector_grid_cell text, out item_count int)
 language plpgsql
 as $procedure$
---do $$
+-- do $$
 declare
-    -- log variables
-    log_level text;
-    work_step text;
-    start_time timestamptz;
-    end_time timestamptz;
-    item_count int;
-    message text;
+--    -- DEV only variables
+--    selector_grid_cell geometry;
+--    item_count int;
     -- extraction variables
-    edge_id_array bigint[];
+    edge_data_array pgnetworks_staging.edge_processing_2[];
+    edge_data pgnetworks_staging.edge_processing_2;
     edge_id bigint;  
-    -- transformation variables
-    junctioned_edge geometry;
-    -- validation variables
-    round_count int;
-    -- loading variables
-    segments_array segments_processing[];
-    segment segments_processing;
+    -- processing variables
+    edges_count int;
+    start_end geometry(point,4326)[];
+    start_end_neighbour geometry(point,4326)[];
+    cp_neighbour geometry(point,4326);
+    ok_neighbours int;
+    neighbours pgnetworks_staging.edge_processing_2[];
+    neighbour pgnetworks_staging.edge_processing_2;
+    edge_split_collection geometry;
+    edge_split_array pgnetworks_staging.edge_processing_2[];
+    edge_split pgnetworks_staging.edge_processing_2;
+
 begin
-    -- set start time
-    start_time := clock_timestamp();
-    work_step := 'segmentize_road_network';
+--    -- DEV only: select the selector grid cell
+--    select into selector_grid_cell geom from pgnetworks_staging.selector_grid limit 1;
+
     -- begin batch processing
-    -- collect the edge data into an array specified by lower and upper bound
-    with edge_ids as (
-        -- create an ordered array that corresponds 
-        -- to the btree index on the edge_id field
-        select array_agg(distinct edge_id order by edge_id asc) as edge_id_array
-          from pgnetworks_staging.vertex_2_edge
-         where edge_id >= lower_bound 
-           and edge_id < upper_bound
+
+    -- collect the edge ids into an array specified by the selector grid cell
+    selector_grid_cell := selector_grid_cell::geometry;
+    with rough_selection as (
+        select id
+             , properties
+             , geom
+          from pgnetworks_staging.road_network 
+         where segmentized is FALSE 
+           and geom && selector_grid_cell::geometry(polygon,4326)
     )
-    ,   edge_geom as (
-        select rn.id as edge_id
-             , rn.geom
-          from pgnetworks_staging.road_network rn
-         where id = any (array(select edge_id_array from edge_ids))
-    )
-    ,   junctions as (
-        select edge_id
-             , st_union(closest_point_geom) as junction_geometries
-             , count(*) filter (where new_point) as new_points_count
-          from pgnetworks_staging.vertex_2_edge 
-         where edge_id = any (array(select edge_id_array from edge_ids))
-         group by edge_id
+    ,   refined_selection as (
+        select id
+             , jsonb_path_query_first(properties, '$.layer') as edge_layer
+             , geom
+          from rough_selection 
+         where st_intersects(st_pointn(geom,1),selector_grid_cell::geometry(polygon,4326))
+         order by geom
+--         limit 10000
     )
     select into edge_data_array
-    array(
-        select row(
-                   -- this row is defined as the custom data type "edge_processing"
-                   -- which allows aggregating multiple datatypes into a heterogenous array
-                   eg.edge_id, 
-                   eg.geom,
-                   j.new_points_count,
-                   j.junction_geometries
-               )::pgnetworks_staging.edge_processing
-          from edge_geom eg
-          left join junctions j on eg.edge_id = j.edge_id
-    );
-    item_count := array_length(edge_data_array, 1);
-    -- loop through the edge data array
-    foreach edge_data in array edge_data_array
-    loop
-        --raise notice '%', edge_data.edge_id;
-        snap_tolerance := 0.1;
-        round_count := 0;
-        -- loop through varying tolerance values
-        -- when snapping the junctions to the edge line.
-        -- equality of the count of the points in the new line
-        -- with the sum of the point count of the old line and thenew points
-        -- exits the loop.
-        -- else an error is thrown.
-        while round_count <= 20 loop
-            begin
-            junctioned_edge := st_snap(edge_data.edge_geom, edge_data.junction_geometries,snap_tolerance);
-                if st_numpoints(junctioned_edge) = st_numpoints(edge_data.edge_geom) + edge_data.new_points_count
-                then             
-                --raise notice '%', round_count;
-                exit;
-                elsif round_count = 20
-                then raise notice 'no value found';
-                end if;
-            end;
-        snap_tolerance := snap_tolerance / 10;
-        round_count := round_count + 1;
-        end loop; 
---    execute format('insert into pgnetworks_staging.junctioned_edges (edge_id, edge_geom) values ($1, $2)')
---    using edge_data.edge_id, junctioned_edge; 
-    -- Here comes Paul Ramsey's simple code:
-    -- https://blog.cleverelephant.ca/2015/02/breaking-linestring-into-segments.html
-    with line_segment_dump as (
-    select edge_data.edge_id, st_astext(st_makeline(lag((pt).geom, 1, null) over (partition by edge_data.edge_id order by edge_data.edge_id, (pt).path), (pt).geom)) as geom
-      from (select edge_data.edge_id, st_dumppoints(junctioned_edge) as pt) as dumps
-    )
-    select into segments_array (
            array(
-                select row(
-                       -- this row is defined as the custom data type "segments"
-                       -- which allows aggregating multiple datatypes into a heterogenous array
-                       edge_id
-                     , ghh_encode(st_x(st_pointn(geom,1))::numeric(10,7),st_y(st_pointn(geom,1))::numeric(10,7)) 
-                     , ghh_encode(st_x(st_pointn(geom,-1))::numeric(10,7),st_y(st_pointn(geom,-1))::numeric(10,7))
-                     , geom
-                       )::segments_processing
-                  from line_segment_dump where geom is not null
-            )
-    );
-    foreach segment in array segments_array 
-        loop
-            execute format('insert into pgnetworks_staging.segments (edge_id, node_1, node_2, geom) values ($1, $2, $3, $4)')
-            using segment.edge_id, segment.node_1, segment.node_2, segment.geom;
-        end loop;
---    raise notice '%', segments_array;        
+                select row(id, edge_layer, geom)::pgnetworks_staging.edge_processing_2
+                  from refined_selection
+           )::pgnetworks_staging.edge_processing_2[]
+      from refined_selection;        
+    item_count := array_length(edge_data_array, 1);
+    edges_count := item_count;
+
+    -- loop through the edge data array and select the neighbours
+    while edges_count > 0
+    loop
+        edge_data := edge_data_array[1];
+--        raise notice 'start count:%, start id: %', edges_count, edge_data.edge_id;
+        start_end := array[st_pointn(edge_data.edge_geom,1), st_pointn(edge_data.edge_geom,-1)];
+
+        -- select the neighbouring edges into the neighbours array 
+        select into neighbours array(
+               select row (
+                      rn.id
+                    , jsonb_path_query_first(rn.properties, '$.layer')
+                    , rn.geom
+                      )::pgnetworks_staging.edge_processing_2  
+                 from pgnetworks_staging.road_network rn
+                where st_intersects(edge_data.edge_geom, rn.geom)
+                  and edge_data.edge_id != rn.id
+        )::pgnetworks_staging.edge_processing_2[];
+
+        -- check whether the array is populated
+        if 
+            array_length(neighbours,1) is NULL 
+        
+        -- if no neighbours exist, remove from edge_data_array
+        then
+            edge_data_array := array_remove(edge_data_array,edge_data);
+            edges_count := array_length(edge_data_array,1);
+ 
+        -- if neighbours exist
+        else
+
+            -- check the relationship
+            ok_neighbours := 0;
+            foreach neighbour in array neighbours 
+            loop
+                start_end_neighbour := array[st_pointn(neighbour.edge_geom,1), st_pointn(neighbour.edge_geom,-1)];
+                cp_neighbour := st_closestpoint(neighbour.edge_geom,edge_data.edge_geom);
+    
+                -- start or end coincide
+                if
+                    start_end && start_end_neighbour
+                then
+                    ok_neighbours := ok_neighbours + 1;
+--                    raise notice '% % % % %',edge_data.edge_id, neighbour.edge_id, 'start or end coincide', ok_neighbours, array_length(neighbours,1);
+
+                    NULL;
+    
+                -- closest point coincides with neighbour's start or end
+                elsif  
+                    cp_neighbour = any(start_end_neighbour)
+                then
+--                    raise notice '% % %',edge_data.edge_id, neighbour.edge_id, 'closest point coincides with neighbour edge start or end';
+                    edge_split_collection := st_split(edge_data.edge_geom, cp_neighbour);
+                    select into edge_split_array array(
+                           select row (
+                                  edge_data.edge_id,
+                                  edge_data.edge_layer,                               
+                                  st_geometryn(edge_split_collection,1)
+                           )::pgnetworks_staging.edge_processing_2
+                           union all
+                           select row (
+                                  edge_data.edge_id,
+                                  edge_data.edge_layer,                                
+                                  st_geometryn(edge_split_collection,2)
+                           )::pgnetworks_staging.edge_processing_2
+                    );
+                    -- remove the original geometry from edge_data_array
+                    edge_data_array := array_remove(edge_data_array,edge_data_array[1]);
+                    -- insert the split geometries into the edge_data_array
+                    edge_data_array := edge_data_array || edge_split_array;
+                    edges_count := array_length(edge_data_array,1);
+--                    raise notice '% % %',edge_data.edge_id, 'intersection: edge is split', edges_count;
+                    exit;
+
+                -- closest point coincides with current edge's start or end
+                elsif   
+                    cp_neighbour = any(start_end)
+                then
+                    ok_neighbours := ok_neighbours + 1;
+--                    raise notice '% % %',edge_data.edge_id, neighbour.edge_id, 'closest point coincides with current edge start or end';
+                    NULL;
+                
+                -- layer entry exists and is identical
+                elsif  (
+                            neighbour.edge_layer is not NULL
+                        and edge_data.edge_layer is not NULL 
+                        and neighbour.edge_layer = edge_data.edge_layer 
+                       ) or not (
+                            neighbour.edge_layer is NULL
+                        and edge_data.edge_layer is NULL 
+                       )                       
+                then
+--                    raise notice '% % %',edge_data.edge_id, neighbour.edge_id, 'crossing permitted';
+                    edge_split_collection := st_split(edge_data.edge_geom, cp_neighbour);
+                    select into edge_split_array array(
+                           select row (
+                                  edge_data.edge_id,
+                                  edge_data.edge_layer,                               
+                                  st_geometryn(edge_split_collection,1)
+                           )::pgnetworks_staging.edge_processing_2
+                           union all
+                           select row (
+                                  edge_data.edge_id,
+                                  edge_data.edge_layer,                                
+                                  st_geometryn(edge_split_collection,2)
+                           )::pgnetworks_staging.edge_processing_2
+                    );
+                    -- remove the original geometry from edge_data_array
+                    edge_data_array := array_remove(edge_data_array,edge_data_array[1]);
+                    -- insert the split geometries into the edge_data_array
+                    edge_data_array := edge_data_array || edge_split_array;
+                    edges_count := array_length(edge_data_array,1);
+--                    raise notice '% % %',edge_data.edge_id, 'crossing: edge is split', edges_count;
+                    exit;
+    
+                else
+                    ok_neighbours := ok_neighbours + 1;
+--                    raise notice '% % %',edge_data.edge_id, neighbour.edge_id, 'crossing prohibited';
+                    NULL;
+                end if;
+            end loop;
+            edge_data_array := array_remove(edge_data_array,edge_data);
+            edges_count := array_length(edge_data_array,1);
+--            raise notice 'stop count:%, stop id: %', edges_count, edge_data.edge_id;
+--            raise notice '%', '----------------------';
+        end if;
+        if
+            ok_neighbours = array_length(neighbours,1)
+        then
+            execute format('insert into pgnetworks_staging.segments (edge_id, edge_type, node_1, node_2, geom) values ($1, $2, $3, $4, $5)')
+            using edge_data.edge_id, 'far_net'::pgnetworks_staging.edge_type, ghh_encode_xy_to_id(st_x(start_end[1])::numeric, st_y(start_end[1])::numeric),ghh_encode_xy_to_id(st_x(start_end[2])::numeric, st_y(start_end[2])::numeric), edge_data.edge_geom;
+        elsif
+            array_length(neighbours,1) is NULL
+        then
+--            raise notice '%',edge_data.edge_id;
+        end if;
     end loop;
     -- close batch processing    
-    end_time := clock_timestamp();
-    execute format('insert into pgnetworks_staging.log (log_level, run_id, start_date, end_date, work_step, lower_bound, upper_bound, chunk_size, item_count, message) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)')
-    using 'INFO', run_id, start_time, end_time, work_step, lower_bound, upper_bound, chunk_size, item_count, ('{"idx":5}')::jsonb;  
-end 
+end
 $procedure$;
+-- $$
+
+create or replace function pgnetworks_staging.call_segmentize_road_network(selector_grid_cell text)
+returns int
+language plpgsql
+as $function$
+declare
+    item_count int;
+begin
+    call pgnetworks_staging.segmentize_road_network(selector_grid_cell, item_count);
+    return item_count;
+end;
+$function$;
 
 
 -- name: drop_procedure_segmentize_road_network#
-drop procedure pgnetworks_staging.process_junctions_and_edges(bigint, bigint, int);
+drop function pgnetworks_staging.call_segmentize_road_network(text);
+drop procedure pgnetworks_staging.segmentize_road_network(in text, out int);

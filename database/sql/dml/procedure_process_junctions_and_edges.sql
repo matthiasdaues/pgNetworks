@@ -95,20 +95,20 @@ begin
         select into segments_array (
             array(
                     select row(
-                        -- this row is defined as the custom data type "segments"
-                        -- which allows aggregating multiple datatypes into a heterogenous array
-                        edge_id
-                        , ghh_encode_xy_to_id(st_x(st_pointn(geom,1))::numeric(10,7),st_y(st_pointn(geom,1))::numeric(10,7)) 
-                        , ghh_encode_xy_to_id(st_x(st_pointn(geom,-1))::numeric(10,7),st_y(st_pointn(geom,-1))::numeric(10,7))
-                        , geom
-                        )::pgnetworks_staging.segment_processing
-                    from line_segment_dump where geom is not null
+                           -- this row is defined as the custom data type "segments"
+                           -- which allows aggregating multiple datatypes into a heterogenous array
+                           edge_id
+                         , 'near_net'
+                         , ghh_encode_xy_to_id(st_x(st_pointn(geom,1))::numeric(10,7),st_y(st_pointn(geom,1))::numeric(10,7)) 
+                         , ghh_encode_xy_to_id(st_x(st_pointn(geom,-1))::numeric(10,7),st_y(st_pointn(geom,-1))::numeric(10,7))
+                         , geom)::pgnetworks_staging.segment_processing
+                      from line_segment_dump where geom is not null
                 )
         );
         foreach segment in array segments_array 
             loop
-                execute format('insert into pgnetworks_staging.segments (edge_id, node_1, node_2, geom) values ($1, $2, $3, $4)')
-                using segment.edge_id, segment.node_1, segment.node_2, segment.geom;
+                execute format('insert into pgnetworks_staging.segments (edge_id, edge_type, node_1, node_2, geom) values ($1, $2, $3, $4, $5)')
+                using segment.edge_id, segment.edge_type::pgnetworks_staging.edge_type, segment.node_1, segment.node_2, segment.geom;
             end loop;
         -- raise notice '%', segments_array;        
         execute format('update pgnetworks_staging.road_network set segmentized = TRUE where id = $1') 

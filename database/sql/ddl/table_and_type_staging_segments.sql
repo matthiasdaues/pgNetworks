@@ -3,6 +3,7 @@
 -- name: create_table_segments#
 create table pgnetworks_staging.segments (
     edge_id bigint,
+    edge_type pgnetworks_staging.edge_type,
     node_1 bigint not null,
     node_2 bigint not null,
     geom geometry(linestring,4326)
@@ -25,12 +26,16 @@ drop table pgnetworks_staging.segments;
 -- create or drop a style mirroring the 
 -- the segments table used in pre-processing
 -- name: create_type_segment_processing#
+create type pgnetworks_staging.edge_type as enum ('junction','near_net','far_net');
 create type pgnetworks_staging.segment_processing as (
     edge_id bigint,
+    edge_type pgnetworks_staging.edge_type,
     node_1 bigint,
     node_2 bigint,
     geom geometry(linestring,4326)
 );
 
+
 -- name: drop_type_segment_processing#
 drop type pgnetworks_staging.segment_processing cascade;
+drop type pgnetworks_staging.edge_type cascade;

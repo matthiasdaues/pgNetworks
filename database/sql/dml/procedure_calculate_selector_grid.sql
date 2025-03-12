@@ -166,4 +166,4 @@ end;
 $procedure$;
 
 -- name: drop_procedure_calculate_selector_grid#
-drop function pgnetworks_staging.calculate_selector_grid(int);
+drop procedure pgnetworks_staging.calculate_selector_grid(int);

@@ -94,3 +94,20 @@ with item_count as (
 select item_count 
   from item_count 
 ;
+
+-- name: calculate_selector_grid#
+truncate table pgnetworks_staging.selector_grid;
+call pgnetworks_staging.calculate_selector_grid(%s);
+
+-- name: find_selector_grid
+select st_astext(geom) as geom from pgnetworks_staging.selector_grid order by geom;
+
+
+-- name: segmentize_road_network$
+with item_count as (
+    select call_segmentize_road_network as item_count 
+      from pgnetworks_staging.call_segmentize_road_network(%s)
+    )
+select item_count 
+  from item_count 
+;

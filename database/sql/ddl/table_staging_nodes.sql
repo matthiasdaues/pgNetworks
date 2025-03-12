@@ -4,7 +4,7 @@
 -- name: create_table_nodes#
 create table pgnetworks_staging.nodes (
     node_id bigint,
-    count int
+    degree int
 );
 
 -- name: create_index_nodes_node_id_idx#
