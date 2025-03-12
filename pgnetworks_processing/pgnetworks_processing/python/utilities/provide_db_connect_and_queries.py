@@ -12,7 +12,7 @@ def provide_db_connection_and_queries():
     load_dotenv(override=True)
 
     # import sql from folder
-    queries = aiosql.from_path("./sql", psycopg2)
+    queries = aiosql.from_path("./pgnetworks_processing/sql", psycopg2)
 
     # prepare db connection
     user = os.getenv('PROCESS_USER')
