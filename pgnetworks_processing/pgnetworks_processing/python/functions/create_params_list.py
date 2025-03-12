@@ -82,3 +82,36 @@ def create_spatial_workstep_params_list(spatial_bound_query_name: str, chunk_siz
         conn.commit()
 
     return params_list
+
+
+def calculate_selector_grid(max_elements: int):
+    """ 
+    create a grid of cells that each contain a 
+    maximum of elements for further processing.
+    The basis of the selector grid is the count
+    of road network linestrings remaining after
+    the initial processing steps.
+    """
+    # get start_date
+    start_date = datetime.now(timezone.utc).isoformat()
+
+    # retrieve all selector grids
+    params = (max_elements,)
+    create_grid_statement_name = 'calculate_selector_grid'
+    create_grid_statement = getattr(queries.dml, create_grid_statement_name).sql
+    with psycopg2.connect(connect_db) as conn:
+        start_date = datetime.now(timezone.utc).isoformat()
+        with conn.cursor() as cur:
+            cur.execute(create_grid_statement,params)
+        conn.commit()   
+        end_date = datetime.now(timezone.utc).isoformat()
+
+    # collect the log info
+    message = {"idx":workstep_idx}
+    message = json.dumps(message)
+    log_level = "INFO"
+
+    # write to log
+    with psycopg2.connect(connect_db) as conn:
+        queries.dml.write_to_log(conn,log_level=log_level,run_id=RUN_ID,start_date=start_date,end_date=end_date,work_step='create_selector_grid',chunk_size=max_elements,item_count=None,message=message)
+        conn.commit()
