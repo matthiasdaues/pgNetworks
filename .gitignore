@@ -4,6 +4,7 @@
 notes/
 presentation/
 scripts/
+archive/
 
 # files with secrets
 .env
