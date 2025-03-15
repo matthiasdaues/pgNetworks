@@ -6,7 +6,7 @@ from operator import itemgetter
 from pgnetworks_processing.python.utilities import Config
 
 
-def create_range_bound_params_list(chunk_bound_query_name: str, workstep_query_name: str, workstep_idx: int, run_id: int):
+def create_range_bound_params_list(chunk_bound_query_name: str, workstep_query_name: str, chunk_size: int, workstep_idx: int, run_id: int):
     """
     create parameter list for a parallel processing work step based on chunk size setting.  \n
     chunk_bound_query_name = query that collects the lower and upper bounds of the processing range.  \n
@@ -20,18 +20,18 @@ def create_range_bound_params_list(chunk_bound_query_name: str, workstep_query_n
     # get chunk bounds based on chunk_size
     with psycopg2.connect(Config.connect_db) as conn:
         chunk_bound_query = getattr(Config.queries.dml, chunk_bound_query_name)
-        bounds_list = list(map(itemgetter(0), chunk_bound_query(conn, chunk_size=Config.CHUNK_SIZE)))
+        bounds_list = list(map(itemgetter(0), chunk_bound_query(conn, chunk_size=chunk_size)))
 
     # concatenate the params_list
-    params_list = [(workstep_query_name, bounds_list[i], bounds_list[i+1], run_id) for i in range(len(bounds_list)-1)]
+    params_list = [(workstep_query_name, bounds_list[i], bounds_list[i+1], workstep_idx, run_id) for i in range(len(bounds_list)-1)]
     i = len(bounds_list)-1
-    params_list.append((workstep_query_name, bounds_list[i],bounds_list[i]+1, run_id))
+    params_list.append((workstep_query_name, bounds_list[i],bounds_list[i]+1, workstep_idx, run_id))
 
     # get end_date
     end_date = datetime.now(timezone.utc).isoformat()
 
     # collect the log info
-    message = {"idx": workstep_idx, # TODO: automatisiere das hochzählen des IndexS
+    message = {"idx": workstep_idx, # TODO: automatisiere das hochzählen des Index
                "run_id": run_id,
                "concurrency": Config.CONCURRENCY,
                "chunk_size": Config.CHUNK_SIZE,
@@ -73,7 +73,7 @@ def create_spatial_workstep_params_list(spatial_bound_query_name: str, workstep_
         bounds_list = list(map(itemgetter(0),spatial_bound_query(conn)))
 
     # concatenate the params_list
-    params_list = [(workstep_query_name, bounds_list[i], run_id) for i in range(len(bounds_list))]
+    params_list = [(workstep_query_name, bounds_list[i], workstep_idx, run_id) for i in range(len(bounds_list))]
 
     # get end_date
     end_date = datetime.now(timezone.utc).isoformat()

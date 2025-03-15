@@ -1,11 +1,12 @@
 import json
 from datetime import datetime, timezone
 import psycopg2
+import multiprocessing as mp
 
 from pgnetworks_processing.python.utilities import Config
 
 
-def spatial_workstep(spatial_workstep_query_name: str, selector_geometry: str, run_id: int):
+def spatial_workstep(spatial_workstep_query_name: str, selector_geometry: str, workstep_idx: int, run_id: int):
     """
     Call a procedure for a spatially disjoint
     instance of workstep that can be executed 
@@ -42,7 +43,7 @@ def spatial_workstep(spatial_workstep_query_name: str, selector_geometry: str, r
         conn.commit()
 
 
-def multiprocess_spatial_workstep(params_list, workstep_query_name: str, workstep_idx: int, run_id: int):
+def multiprocess_spatial_workstep(params_list, spatial_workstep_query_name: str, workstep_idx: int, run_id: int):
     """
     Call a procedure for a workstep that can be
     executed in parallel, like "vertex_2_edge" 
@@ -69,13 +70,13 @@ def multiprocess_spatial_workstep(params_list, workstep_query_name: str, workste
     log_level = "INFO"
 
     # write to log
-    with psycopg2.connect(connect_db) as conn:
+    with psycopg2.connect(Config.connect_db) as conn:
         Config.queries.dml.write_to_log(conn,
                                         log_level=log_level,
                                         run_id=run_id,
                                         start_date=start_date,
                                         end_date=end_date,
                                         work_step=spatial_workstep_query_name,
-                                        item_count=item_count,
+                                        item_count=None,
                                         message=message)
         conn.commit()

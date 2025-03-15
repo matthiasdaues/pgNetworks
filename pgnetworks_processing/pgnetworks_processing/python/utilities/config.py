@@ -29,10 +29,10 @@ class Config:
     connect_db = f"postgresql://{user}:{pwd}@{host}:{port}/{db}"
 
     # Set them from environment
-    CHUNK_SIZE = os.getenv('CHUNK_SIZE')
-    EDGE_PROCESSING_CHUNK_SIZE = os.getenv('EDGE_PROCESSING_CHUNK_SIZE')
-    FAR_NET_PROCESSING_CHUNK_SIZE = os.getenv('FAR_NET_PROCESSING_CHUNK_SIZE')
-    CONCURRENCY = os.getenv('CONCURRENCY')
+    CHUNK_SIZE = int(os.getenv('CHUNK_SIZE'))
+    EDGE_PROCESSING_CHUNK_SIZE = int(os.getenv('EDGE_PROCESSING_CHUNK_SIZE'))
+    FAR_NET_PROCESSING_CHUNK_SIZE = int(os.getenv('FAR_NET_PROCESSING_CHUNK_SIZE'))
+    CONCURRENCY = int(os.getenv('CONCURRENCY'))
 
 
 # create a function that sets a RUN_ID
