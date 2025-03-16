@@ -84,35 +84,45 @@ begin
             snap_tolerance := snap_tolerance / 10;
             round_count := round_count + 1;
             end loop; 
---      execute format('insert into pgnetworks_staging.junctioned_edges (edge_id, edge_geom) values ($1, $2)')
---      using edge_data.edge_id, junctioned_edge; 
-        -- Here comes Paul Ramsey's simple code:
-        -- https://blog.cleverelephant.ca/2015/02/breaking-linestring-into-segments.html
-        with line_segment_dump as (
-        select edge_data.edge_id, st_astext(st_makeline(lag((pt).geom, 1, null) over (partition by edge_data.edge_id order by edge_data.edge_id, (pt).path), (pt).geom)) as geom
-        from (select edge_data.edge_id, st_dumppoints(junctioned_edge) as pt) as dumps
+        execute format(
+        $split_and_insert$
+        with split_result as (
+            select (st_dump(
+                st_split($1, $2)  -- $1 = junctioned_edge, $2 = junction geometries
+            )).geom as parted_geom
         )
-        select into segments_array (
-            array(
-                    select row(
-                           -- this row is defined as the custom data type "segments"
-                           -- which allows aggregating multiple datatypes into a heterogenous array
-                           edge_id
-                         , 'near_net'
-                         , ghh_encode_xy_to_id(st_x(st_pointn(geom,1))::numeric(10,7),st_y(st_pointn(geom,1))::numeric(10,7)) 
-                         , ghh_encode_xy_to_id(st_x(st_pointn(geom,-1))::numeric(10,7),st_y(st_pointn(geom,-1))::numeric(10,7))
-                         , geom)::pgnetworks_staging.segment_processing
-                      from line_segment_dump where geom is not null
-                )
-        );
-        foreach segment in array segments_array 
-            loop
-                execute format('insert into pgnetworks_staging.segments (edge_id, edge_type, node_1, node_2, geom) values ($1, $2, $3, $4, $5)')
-                using segment.edge_id, segment.edge_type::pgnetworks_staging.edge_type, segment.node_1, segment.node_2, segment.geom;
-            end loop;
-        -- raise notice '%', segments_array;        
-        execute format('update pgnetworks_staging.road_network set segmentized = TRUE where id = $1') 
+        insert into pgnetworks_staging.segments (
+            edge_id, 
+            edge_type, 
+            node_1, 
+            node_2, 
+            geom
+        )
+        select
+            $3 as edge_id,         -- $3 = edge_data.edge_id
+            'near_net',
+            ghh_encode_xy_to_id(
+                st_x(st_pointn(parted_geom, 1))::numeric(10,7),
+                st_y(st_pointn(parted_geom, 1))::numeric(10,7)
+            ) as node_1,
+            ghh_encode_xy_to_id(
+                st_x(st_pointn(parted_geom, -1))::numeric(10,7),
+                st_y(st_pointn(parted_geom, -1))::numeric(10,7)
+            ) as node_2,
+            parted_geom
+        from split_result
+        where parted_geom is not null
+        and geometrytype(parted_geom) = 'linestring'
+        $split_and_insert$
+        )
+        using
+            junctioned_edge,
+            edge_data.junction_geometries,
+            edge_data.edge_id;
+
+        execute format('update pgnetworks_staging.road_network set segmentized = TRUE where id = $1')
         using edge_data.edge_id;
+        
     end loop;
     -- close batch processing
 end 

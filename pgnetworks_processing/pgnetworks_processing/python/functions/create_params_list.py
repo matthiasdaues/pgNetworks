@@ -23,9 +23,9 @@ def create_range_bound_params_list(chunk_bound_query_name: str, workstep_query_n
         bounds_list = list(map(itemgetter(0), chunk_bound_query(conn, chunk_size=Config.CHUNK_SIZE)))
 
     # concatenate the params_list
-    params_list = [(workstep_query_name, bounds_list[i], bounds_list[i+1], run_id) for i in range(len(bounds_list)-1)]
+    params_list = [(workstep_query_name, bounds_list[i], bounds_list[i+1], workstep_idx, run_id) for i in range(len(bounds_list)-1)]
     i = len(bounds_list)-1
-    params_list.append((workstep_query_name, bounds_list[i],bounds_list[i]+1, run_id))
+    params_list.append((workstep_query_name, bounds_list[i],bounds_list[i]+1, workstep_idx, run_id))
 
     # get end_date
     end_date = datetime.now(timezone.utc).isoformat()
@@ -73,7 +73,7 @@ def create_spatial_workstep_params_list(spatial_bound_query_name: str, workstep_
         bounds_list = list(map(itemgetter(0),spatial_bound_query(conn)))
 
     # concatenate the params_list
-    params_list = [(workstep_query_name, bounds_list[i], run_id) for i in range(len(bounds_list))]
+    params_list = [(workstep_query_name, bounds_list[i], workstep_idx, run_id) for i in range(len(bounds_list))]
 
     # get end_date
     end_date = datetime.now(timezone.utc).isoformat()

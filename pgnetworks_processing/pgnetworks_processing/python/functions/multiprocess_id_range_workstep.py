@@ -6,7 +6,7 @@ import multiprocessing as mp
 from pgnetworks_processing.python.utilities import Config
 
 
-def id_range_workstep(workstep_query_name: str, lower_bound: int, upper_bound: int, run_id: int):
+def id_range_workstep(workstep_query_name: str, lower_bound: int, upper_bound: int, workstep_idx: int, run_id: int):
     """
     Call a procedure for a numerically disjoint
     instance of workstep that can be executed 
@@ -74,7 +74,7 @@ def multiprocess_id_range_workstep(params_list, workstep_query_name: str, workst
                                         run_id=run_id,
                                         start_date=start_date,
                                         end_date=end_date,
-                                        work_step=workstep_query_name
+                                        work_step=workstep_query_name,
                                         item_count=None,
                                         message=message)
         conn.commit()
