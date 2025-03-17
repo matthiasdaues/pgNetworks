@@ -17,6 +17,7 @@ declare
     -- result variables
     access record;
 begin
+    create table 
     -- begin batch processing
     -- collect the id-array specified by lower and upper bound
     with id_list as (
@@ -59,12 +60,12 @@ begin
         end loop;
         -- calculate the closest point id
         with closest_point as (
-            select st_closestpoint(closest.edge_geom,vertex_geom) as closest_point_geom
+            select ST_ReducePrecision(st_closestpoint(closest.edge_geom,vertex_geom), 0.0000001) as closest_point_geom
         )
         , edge_dump_array as (
             select array_agg(ed.edge_dump) as edge_dump_array 
               from (
-                select (st_dumppoints(closest.edge_geom)).geom as edge_dump
+                select ST_ReducePrecision((st_dumppoints(closest.edge_geom)).geom, 0.0000001) as edge_dump
                 ) ed
         )
         select into access
