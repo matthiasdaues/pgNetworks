@@ -40,10 +40,11 @@ begin
     insert into pgnetworks_staging.selector_grid (parent_id, population, geom, processed)
     select 0
          , count(*) as population
-         , st_envelope(st_extent(geom))::geometry(polygon, 4326) as geom
+         , st_envelope(st_extent(rn.geom))::geometry(polygon, 4326) as geom
          , case when count(*) <= max_points then true else false end as processed
-    from pgnetworks_staging.road_network
-   where segmentized is FALSE
+    from pgnetworks_staging.road_network rn
+    left join pgnetworks_staging.segments s on rn.id = s.edge_id 
+   where s is NULL
     ;
     /*
      * 3. iteratively process parcels that exceed max_points.

@@ -191,16 +191,11 @@ begin
     /*
      * 4) (optional) mark the edges as fully segmentized or do further updates
      */
---    update pgnetworks_staging.road_network rn 
---       set rn.segmentized = TRUE
---      from junctioned_edges je
---     where rn.id = je.edge_id 
---       and je.snapped is TRUE;
-
-    /*
-     * 5) remove temporary table
-     */
-    -- optional step: use the missing "snapped" flat to raise errors.
+--   update pgnetworks_staging.road_network
+--      set segmentized = TRUE
+--     from junctioned_edges je
+--    where id = je.edge_id 
+--      and je.snapped is TRUE;
 
     /*
      * 5) remove temporary table

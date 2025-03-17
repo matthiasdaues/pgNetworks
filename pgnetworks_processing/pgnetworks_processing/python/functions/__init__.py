@@ -3,3 +3,4 @@ from .create_params_list import create_spatial_workstep_params_list
 from .create_params_list import calculate_selector_grid
 from .multiprocess_id_range_workstep import multiprocess_id_range_workstep
 from .multiprocess_spatial_workstep import multiprocess_spatial_workstep
+from .create_index import create_index

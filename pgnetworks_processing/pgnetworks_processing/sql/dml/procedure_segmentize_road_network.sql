@@ -22,12 +22,14 @@ begin
            and segmentized is FALSE 
         )
     ,   refined_selection as (
-        select id::int
-             , coalesce(cast((properties ->> 'layer') as text),'n') as edge_layer
-             , geom
-          from rough_selection
-         where st_intersects(geom, selector_grid_cell::geometry(polygon,4326))
-         order by geom
+        select rn.id::int
+             , coalesce(cast((rn.properties ->> 'layer') as text),'n') as edge_layer
+             , rn.geom
+          from rough_selection rn
+          left join pgnetworks_staging.segments s on rn.id = s.edge_id
+         where st_intersects(rn.geom, selector_grid_cell::geometry(polygon,4326))
+           and s is NULL
+         order by rn.geom
         )
     /*
      * 2) for each edge, collect the geometry of all neighbors
@@ -37,22 +39,22 @@ begin
      *    - we then split the edge geometry by the neighbor geometry.
     */
     ,   splitted as (
-        select e.id as edge_id
+        select rs.id as edge_id
                -- st_dump() is used because st_split may return multiple pieces
              , (st_dump(
                case 
                 when st_collect(n.geom) is null 
-                 then e.geom 
-                else st_split(e.geom, st_collect(n.geom)) 
+                 then rs.geom 
+                else st_split(rs.geom, st_collect(n.geom)) 
                end
                )).geom as splitted_geom
-          from selected_edges e
+          from refined_selection rs
           left join pgnetworks_staging.road_network n 
-            on st_intersects(e.geom, n.geom)
-           and e.id    != n.id
-           and e.layer = coalesce(n.properties->>'layer', 'n')           
-           and st_dimension(ST_Intersection(e.geom, n.geom)) = 0 
-         group by e.id, e.geom
+            on st_intersects(rs.geom, n.geom)
+           and rs.id    != n.id
+           and rs.edge_layer = coalesce(n.properties->>'layer', 'n')           
+           and st_dimension(ST_Intersection(rs.geom, n.geom)) = 0 
+         group by rs.id, rs.geom
         )
     /*
      *  3) insert all split results into the 'segments' table.
