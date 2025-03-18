@@ -79,19 +79,16 @@ begin
           join edge_dump_array eda
             on cp.edge_id = eda.edge_id
         )
-    insert into pgnetworks_staging.vertex_2_edge
-    (vertex_id, closest_point_id, closest_point_geom, edge_id, new_point)
-    select vertex_id
-         , closest_point_id
-         , closest_point_geom
-         , edge_id
-         , new_point
-      from all_data;
-
-    -- Record how many rows were inserted
-    get diagnostics item_count = row_count;
-
-    -- 2) insert into segments in one go
+    -- 1) insert into vertex_2_edge from a CTE
+    ,   i as (insert into pgnetworks_staging.vertex_2_edge
+        (vertex_id, closest_point_id, closest_point_geom, edge_id, new_point)
+        select vertex_id
+            , closest_point_id
+            , closest_point_geom
+            , edge_id
+            , new_point
+        from all_data)
+    -- 2) close query and insert into segments
     insert into pgnetworks_staging.segments
     (edge_id, edge_type, node_1, node_2, geom)
     select -1
@@ -101,7 +98,11 @@ begin
          , st_reduceprecision(st_makeline(vt.vertex_geom, a.closest_point_geom),0000001)
       from all_data a
       join vt 
-        on a.vertex_id = vt.vertex_id;
+        on a.vertex_id = vt.vertex_id
+    ;
+
+    -- Record how many rows were inserted
+    get diagnostics item_count = row_count;
 
 END;
 $procedure$;

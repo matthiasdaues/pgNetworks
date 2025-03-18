@@ -117,17 +117,36 @@ select item_count
 ;
 
 
--- name: copy_segments_to_edges$
-insert into edges 
-(edge_id, source_edge_id, edge_type, node_1, node_2, geom)
-select ghh_encode_xy_to_id(
-        st_x(st_lineInterpolatePoint(geom, 0.5))::numeric, 
-        st_y(st_lineInterpolatePoint(geom, 0.5))::numeric
-       ) 
-     , edge_id
-     , edge_type
-     , node_1
-     , node_2
-     , geom
-  from pgnetworks_staging.segments
+-- name: find_bounds_in_segments
+with node_1_id as (
+    select distinct(node_1)
+      from pgnetworks_staging.segments
+     order by node_1
+    )
+,   ordered_rows as (
+    select node_1 as id
+         , row_number() over (order by node_1 asc) as rn
+      from node_1_id
+     order by id
+    )
+,   ordered_bounds as (
+    select id
+    from ordered_rows 
+    where mod((rn-1),:chunk_size) = 0
+    order by id asc
+    )
+select * from ordered_bounds
+ union
+select max(id) from ordered_rows
+ order by id asc
+;
+
+
+-- name: copy_segments_to_edges
+with item_count as (
+    select call_copy_segments_to_edges as item_count 
+      from pgnetworks_staging.call_copy_segments_to_edges(%s, %s)
+    )
+select item_count 
+  from item_count 
 ;
