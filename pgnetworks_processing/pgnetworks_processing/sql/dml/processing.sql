@@ -103,7 +103,7 @@ call pgnetworks_staging.calculate_selector_grid(%s)
 
 
 -- name: select_selector_grid
-select st_astext(geom) as geom from pgnetworks_staging.selector_grid where id = 512 order by geom
+select st_astext(geom) as geom from pgnetworks_staging.selector_grid order by geom
 ;
 
 
