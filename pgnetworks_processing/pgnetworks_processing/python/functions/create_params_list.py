@@ -31,7 +31,7 @@ def create_range_bound_params_list(chunk_bound_query_name: str, workstep_query_n
     end_date = datetime.now(timezone.utc).isoformat()
 
     # collect the log info
-    message = {"idx": workstep_idx, # TODO: automatisiere das hochzählen des IndexS
+    message = {"idx": workstep_idx, # TODO: automatisiere das hochzählen des Index
                "run_id": run_id,
                "concurrency": Config.CONCURRENCY,
                "chunk_size": Config.CHUNK_SIZE,

@@ -43,7 +43,7 @@ def spatial_workstep(spatial_workstep_query_name: str, selector_geometry: str, w
         conn.commit()
 
 
-def multiprocess_spatial_workstep(params_list, workstep_query_name: str, workstep_idx: int, run_id: int):
+def multiprocess_spatial_workstep(params_list, spatial_workstep_query_name: str, workstep_idx: int, run_id: int):
     """
     Call a procedure for a workstep that can be
     executed in parallel, like "vertex_2_edge" 
@@ -77,6 +77,6 @@ def multiprocess_spatial_workstep(params_list, workstep_query_name: str, workste
                                         start_date=start_date,
                                         end_date=end_date,
                                         work_step=spatial_workstep_query_name,
-                                        item_count=item_count,
+                                        item_count=None,
                                         message=message)
         conn.commit()
