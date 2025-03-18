@@ -25,9 +25,8 @@ begin
         select location_id as vertex_id
              , st_setsrid(public.ghh_decode_id_to_wkt(location_id)::geometry, 4326) as vertex_geom
           from pgnetworks_staging.terminals
-         --where location_id = 2595910006465660600
-          where location_id >= 2595910006465660600
-            and location_id <  2595910007465660600
+          where location_id >= lower_bound
+            and location_id <  upper_bound
         )
     ,   buffer as (
         select vertex_id
@@ -80,9 +79,8 @@ begin
           join edge_dump_array eda
             on cp.edge_id = eda.edge_id
         )
-    -- 1) Insert into vertex_2_edge in one go
-    -- insert into pgnetworks_staging.vertex_2_edge
-    --     (vertex_id, closest_point_id, closest_point_geom, edge_id, new_point)
+    insert into pgnetworks_staging.vertex_2_edge
+    (vertex_id, closest_point_id, closest_point_geom, edge_id, new_point)
     select vertex_id
          , closest_point_id
          , closest_point_geom
@@ -100,7 +98,7 @@ begin
          , 'junction'::pgnetworks_staging.edge_type
          , a.vertex_id
          , a.closest_point_id
-         , st_makeline(vt.vertex_geom, a.closest_point_geom)
+         , st_reduceprecision(st_makeline(vt.vertex_geom, a.closest_point_geom),0000001)
       from all_data a
       join vt 
         on a.vertex_id = vt.vertex_id;
