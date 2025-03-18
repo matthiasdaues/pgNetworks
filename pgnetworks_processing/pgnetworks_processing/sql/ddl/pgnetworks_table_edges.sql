@@ -46,13 +46,13 @@ comment on column pgnetworks.edges.geom
     ;
 
 -- name: create_index_edges_node_1_id_idx#
-create index edges_node_1_id_idx on pgnetworks_staging.edges using btree (node_id);
+create index edges_node_1_id_idx on pgnetworks.edges using btree (node_id);
 -- name: create_index_edges_node_2_id_idx#
-create index edges_node_2_id_idx on pgnetworks_staging.edges using btree (node_id);
+create index edges_node_2_id_idx on pgnetworks.edges using btree (node_id);
 -- name: create_index_source_edge_id_idx#
-create index edges_source_edge_id_idx on pgnetworks_staging.edges using btree (node_id);
+create index edges_source_edge_id_idx on pgnetworks.edges using btree (node_id);
 -- name: create_index_edges_geom_idx#
-create index edges_geom_idx on pgnetworks_staging.edges using gist (geometry);
+create index edges_geom_idx on pgnetworks.edges using gist (geometry);
 
 -- name: drop_table_edges#
 drop table pgnetworks.edges;
