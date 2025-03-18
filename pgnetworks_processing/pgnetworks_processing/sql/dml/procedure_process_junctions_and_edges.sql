@@ -2,120 +2,207 @@
 -- snaps closest points to linestrings, segmentizes linestrings
 
 -- name: create_procedure_process_junctions_and_edges#
-create or replace procedure pgnetworks_staging.process_junctions_and_edges(in lower_bound bigint, upper_bound bigint, out item_count int)
+create or replace procedure pgnetworks_staging.process_junctions_and_edges(
+    in  lower_bound bigint,
+    in  upper_bound bigint,
+    out item_count  int
+)
 language plpgsql
 as $procedure$
---do $$
 declare
-    -- extraction variables
-    edge_data_array pgnetworks_staging.edge_processing[];
-    edge_data pgnetworks_staging.edge_processing;
-    -- transformation variables
-    snap_tolerance float;
-    junctioned_edge geometry;
-    -- validation variables
-    round_count int;
-    -- loading variables
-    segment pgnetworks_staging.segment_processing;
-    segments_array pgnetworks_staging.segment_processing[];
+    snap_tolerance float8 := 1.0000000000000001e-15;  -- initial tolerance
+    round_count    int    := 0;
+    edges_remaining int;
 begin
-    -- begin batch processing
-    -- collect the edge data into an array specified by lower and upper bound
-    with edge_ids as (
-        -- create an ordered array that corresponds 
-        -- to the btree index on the edge_id field
-        select array_agg(distinct edge_id order by edge_id asc) as edge_id_array
-          from pgnetworks_staging.vertex_2_edge
-         where edge_id >= lower_bound 
-           and edge_id < upper_bound
-    )
-    ,   edge_geom as (
-        select rn.id as edge_id
-             , rn.geom
-          from pgnetworks_staging.road_network rn
-         where id = any (array(select edge_id_array from edge_ids))
-    )
-    ,   junctions as (
-        select edge_id
-             , st_union(closest_point_geom) as junction_geometries
-             , count(*) filter (where new_point) as new_points_count
-          from pgnetworks_staging.vertex_2_edge 
-         where edge_id = any (array(select edge_id_array from edge_ids))
-         group by edge_id
-    )
-    select into edge_data_array
-    array(
-        select row(
-                   -- this row is defined as the custom data type "edge_processing"
-                   -- which allows aggregating multiple datatypes into a heterogenous array
-                   eg.edge_id, 
-                   eg.geom,
-                   j.new_points_count,
-                   j.junction_geometries
-               )::pgnetworks_staging.edge_processing
-          from edge_geom eg
-          left join junctions j on eg.edge_id = j.edge_id
-    );
-    item_count := array_length(edge_data_array, 1);
-    -- loop through the edge data array
-    foreach edge_data in array edge_data_array
-    loop
-        --raise notice '%', edge_data.edge_id;
-        snap_tolerance := 0.1;
-        round_count := 0;
-        -- loop through varying tolerance values
-        -- when snapping the junctions to the edge line.
-        -- equality of the count of the points in the new line
-        -- with the sum of the point count of the old line and thenew points
-        -- exits the loop.
-        -- else an error is thrown.
-        while round_count <= 20 
-            loop
-                begin
-                junctioned_edge := st_snap(edge_data.edge_geom, edge_data.junction_geometries,snap_tolerance);
-                    if st_numpoints(junctioned_edge) = st_numpoints(edge_data.edge_geom) + edge_data.new_points_count
-                    then             
-                    --raise notice '%', round_count;
-                    exit;
-                    elsif round_count = 20
-                    then raise notice 'no value found';
-                    end if;
-                end;
-            snap_tolerance := snap_tolerance / 10;
-            round_count := round_count + 1;
-            end loop; 
---      execute format('insert into pgnetworks_staging.junctioned_edges (edge_id, edge_geom) values ($1, $2)')
---      using edge_data.edge_id, junctioned_edge; 
-        -- Here comes Paul Ramsey's simple code:
-        -- https://blog.cleverelephant.ca/2015/02/breaking-linestring-into-segments.html
-        with line_segment_dump as (
-        select edge_data.edge_id, st_astext(st_makeline(lag((pt).geom, 1, null) over (partition by edge_data.edge_id order by edge_data.edge_id, (pt).path), (pt).geom)) as geom
-        from (select edge_data.edge_id, st_dumppoints(junctioned_edge) as pt) as dumps
+    /* 
+     * 0) we create a temp table holding the new edges data as well as some
+     *    control data to govern the procedure.
+     */
+    create temporary table junctioned_edges (
+        edge_id int,
+        orig_geom geometry,
+        orig_points_count int,
+        union_junctions geometry,
+        split_junctions geometry,
+        required_points int,
+        new_geom geometry,
+        new_points_count int,
+        snapped boolean generated always as (case when orig_points_count + required_points = new_points_count then TRUE else FALSE END) stored
         )
-        select into segments_array (
-            array(
-                    select row(
-                           -- this row is defined as the custom data type "segments"
-                           -- which allows aggregating multiple datatypes into a heterogenous array
-                           edge_id
-                         , 'near_net'
-                         , ghh_encode_xy_to_id(st_x(st_pointn(geom,1))::numeric(10,7),st_y(st_pointn(geom,1))::numeric(10,7)) 
-                         , ghh_encode_xy_to_id(st_x(st_pointn(geom,-1))::numeric(10,7),st_y(st_pointn(geom,-1))::numeric(10,7))
-                         , geom)::pgnetworks_staging.segment_processing
-                      from line_segment_dump where geom is not null
-                )
-        );
-        foreach segment in array segments_array 
-            loop
-                execute format('insert into pgnetworks_staging.segments (edge_id, edge_type, node_1, node_2, geom) values ($1, $2, $3, $4, $5)')
-                using segment.edge_id, segment.edge_type::pgnetworks_staging.edge_type, segment.node_1, segment.node_2, segment.geom;
-            end loop;
-        -- raise notice '%', segments_array;        
-        execute format('update pgnetworks_staging.road_network set segmentized = TRUE where id = $1') 
-        using edge_data.edge_id;
+    ;
+    /* 
+     *    and fill the table with the data for this instance of the procedure.
+     */
+    insert into junctioned_edges (edge_id, orig_geom, orig_points_count, union_junctions, split_junctions, required_points)
+    select v2e.edge_id
+         , rn.geom as orig_geom
+         , st_numpoints(rn.geom) as orig_points_count
+         , st_collect(distinct(closest_point_geom)) filter (where v2e.new_point) as union_junctions
+         , st_collect(distinct(closest_point_geom)) as split_junctions
+         , count(distinct closest_point_geom) filter (where v2e.new_point) as required_points
+      from pgnetworks_staging.vertex_2_edge v2e
+      left join pgnetworks_staging.road_network rn on rn.id = v2e.edge_id
+     where edge_id >= lower_bound
+       and edge_id <  upper_bound
+     group by v2e.edge_id, rn.geom
+    ;
+    select into item_count count(*) from junctioned_edges;
+    /*
+     * 1) we repeat up to 20 times:
+     *    for all edges in [lower_bound, upper_bound) that are not fully snapped,
+     *    gather their “junction points,” do a bulk st_snap, update road_network,
+     *    and mark edges that are now fully snapped as snapped=true in vertex_2_edge.
+     */
+    while round_count <= 10
+    loop
+        /* 
+         * a. bulk snap all unsnapped edges in a single shot:
+         *    - we gather (for each edge) the union of its new_point "closest_point_geom".
+         *    - we compare numpoints before/after snapping.
+         *    - if it matches old_points + new_points_count => mark edge as snapped.
+        */
+
+        with edge_data as (
+            select je.edge_id
+                 , je.orig_geom
+                 , je.union_junctions
+              from junctioned_edges je
+             where snapped = false
+            )
+        ,   snapped as (
+            -- snap the geometry in bulk, generating the new geometry in one pass
+            select edge_id
+                 , orig_geom
+                 , case
+                    when union_junctions is NULL
+                    then orig_geom
+                    else st_snap(orig_geom, union_junctions, snap_tolerance) 
+                   end as new_geom
+              from edge_data
+             )
+        ,   count as (
+            select edge_id
+                 , st_numpoints(new_geom) as new_points_count
+              from snapped
+            )
+        -- (1) update the "road_network" table with the newly snapped geometry
+        update junctioned_edges je
+           set new_geom = s.new_geom
+             , new_points_count = c.new_points_count
+          from snapped s
+             , count c
+         where je.edge_id = s.edge_id
+           and je.edge_id = c.edge_id;
+
+        /* 
+         * b. count how many edges remain unsnapped in the requested range.
+         *    if zero, we're done snapping.
+         */
+        select count(distinct edge_id)
+          into edges_remaining
+          from junctioned_edges
+         where snapped = false;
+
+        raise notice '% % %', round_count, edges_remaining, snap_tolerance;
+
+        if edges_remaining = 0 then
+            -- all edges have integrated their new points, so break out of the loop
+            exit;
+        end if;
+
+        /*
+         * c. if not done, reduce snap tolerance by factor 10 and repeat.
+         */
+        round_count := round_count + 1;
+        snap_tolerance := snap_tolerance * 10.0;
+
+        
     end loop;
-    -- close batch processing
-end 
+
+    /*
+     * 2) at this point, either all edges are snapped or we reached 20 iterations.
+     *    if some remain unsnapped, we might log/throw a notice.
+     */
+    select count(distinct edge_id)
+      into edges_remaining
+      from junctioned_edges
+     where snapped = false;
+
+    if edges_remaining > 0 then
+        with edge_id_array as (select array_agg(distinct(edge_id)) from junctioned_edges where snapped = FALSE)
+        insert into pgnetworks_staging.log (log_level, start_date, work_step, message)
+        select 'WARNING' as log_level
+             , now() as start_date
+             , 'process_junctions_and_edges' as work_step
+             , jsonb_build_object(
+                'message', 'some edges could not be snapped',
+                'edges_remaining', edges_remaining,
+                'edge_id', (select array_agg from edge_id_array))
+    ;
+        raise notice 'some edges could not be snapped after % rounds.', round_count;
+    end if;
+        
+        raise notice 'edges snapped after % rounds with snap tolerance %.', round_count, snap_tolerance;
+
+    /*
+      3) now do a final st_split pass (in bulk) for all edges in [lower_bound, upper_bound).
+         insert the resulting segments in a single shot. 
+         we only need to split each edge by the union of all relevant “closest_point_geom” 
+         (since they should now lie on the line).
+    */
+    with final_edges as (
+        select edge_id
+             , new_geom
+               -- union of *all* junction points relevant to that edge 
+             , split_junctions
+          from junctioned_edges
+        )
+    ,   splitted as (
+        select fe.edge_id
+             , st_split(fe.new_geom, fe.split_junctions) as geom_collection
+          from final_edges fe
+        )
+    ,   parted as (
+        select edge_id
+             , (st_dump(geom_collection)).geom as parted_geom
+          from splitted
+    )
+    insert into pgnetworks_staging.segments (
+        edge_id,
+        edge_type,
+        node_1,
+        node_2,
+        geom
+    )
+    select edge_id
+         , 'near_net'  -- or your desired edge_type
+         , ghh_encode_xy_to_id(
+            st_x(st_pointn(parted_geom, 1))::numeric(10,7),
+            st_y(st_pointn(parted_geom, 1))::numeric(10,7)
+           ) as node_1
+         , ghh_encode_xy_to_id(
+            st_x(st_pointn(parted_geom, -1))::numeric(10,7),
+            st_y(st_pointn(parted_geom, -1))::numeric(10,7)
+           ) as node_2
+         , parted_geom
+      from parted
+     where parted_geom is not null;
+
+    /*
+     * 4) (optional) mark the edges as fully segmentized or do further updates
+     */
+--   update pgnetworks_staging.road_network
+--      set segmentized = TRUE
+--     from junctioned_edges je
+--    where id = je.edge_id 
+--      and je.snapped is TRUE;
+
+    /*
+     * 5) remove temporary table
+     */
+    drop table junctioned_edges;
+    
+end
 $procedure$;
 
 create or replace function pgnetworks_staging.call_process_junctions_and_edges(lower_bound bigint, upper_bound bigint)

@@ -117,11 +117,17 @@ select item_count
 ;
 
 
--- name: count_node_degree$
-with item_count as (
-    select call_count_node_degree as item_count 
-      from pgnetworks_staging.call_count_node_degree(%s)
-    )
-select item_count 
-  from item_count 
+-- name: copy_segments_to_edges$
+insert into edges 
+(edge_id, source_edge_id, edge_type, node_1, node_2, geom)
+select ghh_encode_xy_to_id(
+        st_x(st_lineInterpolatePoint(geom, 0.5))::numeric, 
+        st_y(st_lineInterpolatePoint(geom, 0.5))::numeric
+       ) 
+     , edge_id
+     , edge_type
+     , node_1
+     , node_2
+     , geom
+  from pgnetworks_staging.segments
 ;
