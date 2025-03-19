@@ -28,10 +28,19 @@ drop table pgnetworks_staging.segments;
 
 -------------------------------------------------
 
+-- create the enum data type to describe
+-- the different kinds of segments / edges
+-- name: create_type_edge_type#
+create type pgnetworks_staging.edge_type as enum ('network_to_vertex', 'network_near', 'network_far', 'root_to_vertex', 'unsegmentized');
+
+-- name: drop_type_edge_type#
+drop type pgnetworks_staging.edge_type cascade;
+
+-------------------------------------------------
+
 -- create or drop a style mirroring the 
 -- segments table used in pre-processing
 -- name: create_type_segment_processing#
-create type pgnetworks_staging.edge_type as enum ('network_to_vertex', 'network_near', 'network_far', 'root_to_vertex');
 create type pgnetworks_staging.segment_processing as (
     edge_id bigint,
     source_edge_id bigint,
@@ -41,7 +50,5 @@ create type pgnetworks_staging.segment_processing as (
     geom geometry(linestring,4326)
 );
 
-
 -- name: drop_type_segment_processing#
 drop type pgnetworks_staging.segment_processing cascade;
-drop type pgnetworks_staging.edge_type cascade;
