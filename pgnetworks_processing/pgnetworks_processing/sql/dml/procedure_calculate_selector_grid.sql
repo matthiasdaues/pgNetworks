@@ -43,7 +43,7 @@ begin
          , st_envelope(st_extent(rn.geom))::geometry(polygon, 4326) as geom
          , case when count(*) <= max_points then true else false end as processed
     from pgnetworks_staging.road_network rn
-    left join pgnetworks_staging.segments s on rn.id = s.edge_id 
+    left join pgnetworks_staging.segments s on rn.id = s.source_edge_id 
    where s is NULL
     ;
     /*

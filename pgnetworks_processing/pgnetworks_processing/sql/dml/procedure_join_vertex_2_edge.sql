@@ -61,11 +61,11 @@ begin
         with closest_point as (
             select st_lineInterpolatePoint(
                 closest.edge_geom, 
-                st_line_locate_point(
+                st_lineLocatePoint(
                     closest.edge_geom, 
                     vertex_geom
                 )
-            ) as closest_point      
+            ) as closest_point_geom      
         )
         , edge_dump_array as (
             select array_agg(ed.edge_dump) as edge_dump_array 
@@ -77,7 +77,7 @@ begin
                vertex_id
              , closest.edge_id 
              , public.ghh_encode_xy_to_id(st_x(cp.closest_point_geom)::numeric(10,7),st_y(cp.closest_point_geom)::numeric(10,7)) as closest_point_id
-             , st_makeline(vertex_geom, cp.closest_point_geom) as junction_geom
+             , st_reducePrecision(st_makeline(vertex_geom, cp.closest_point_geom), 0.0000001) as junction_geom
              , st_lineInterpolatePoint(st_makeline(vertex_geom, cp.closest_point_geom), 0.5) as junction_center
              , case when cp.closest_point_geom = ANY(eda.edge_dump_array) then false else true end as new_point
           from closest_point cp, edge_dump_array eda;
