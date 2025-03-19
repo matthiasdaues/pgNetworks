@@ -77,7 +77,7 @@ begin
     execute format('insert into pgnetworks_staging.vertex_2_edge (vertex_id, closest_point_id, closest_point_geom, edge_id, new_point) values ($1, $2, $3, $4, $5)')
     using access.vertex_id, access.closest_point_id, access.closest_point_geom, access.edge_id, access.new_point; 
     execute format('insert into pgnetworks_staging.segments (edge_id, edge_type, node_1, node_2, geom) values ($1, $2, $3, $4, $5)')
-    using -1, 'junction'::pgnetworks_staging.edge_type, access.vertex_id, access.closest_point_id, st_makeline(vertex_geom, access.closest_point_geom); 
+    using -1, 'junction'::pgnetworks_staging.edge_type, access.closest_point_id, access.vertex_id, st_makeline(vertex_geom, access.closest_point_geom); 
     end loop;
     -- close batch processing
 end 
