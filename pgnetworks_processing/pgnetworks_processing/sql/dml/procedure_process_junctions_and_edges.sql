@@ -33,18 +33,36 @@ begin
     /* 
      *    and fill the table with the data for this instance of the procedure.
      */
-    insert into junctioned_edges (edge_id, orig_geom, orig_points_count, union_junctions, split_junctions, required_points)
-    select v2e.edge_id
-         , rn.geom as orig_geom
-         , st_numpoints(rn.geom) as orig_points_count
-         , st_collect(distinct(closest_point_geom)) filter (where v2e.new_point) as union_junctions
-         , st_collect(distinct(closest_point_geom)) as split_junctions
-         , count(distinct closest_point_geom) filter (where v2e.new_point) as required_points
-      from pgnetworks_staging.vertex_2_edge v2e
-      left join pgnetworks_staging.road_network rn on rn.id = v2e.edge_id
-     where edge_id >= lower_bound
-       and edge_id <  upper_bound
-     group by v2e.edge_id, rn.geom
+    with junction_data as (
+        select v2e.edge_id
+            , rn.geom as orig_geom
+            , st_numpoints(rn.geom) as orig_points_count
+            , st_collect(distinct(closest_point_geom)) filter (where v2e.new_point) as union_junctions
+            , st_collect(distinct(closest_point_geom)) as split_junctions
+            , count(distinct closest_point_geom) filter (where v2e.new_point) as required_points
+        from pgnetworks_staging.vertex_2_edge v2e
+        left join pgnetworks_staging.road_network rn on rn.id = v2e.edge_id
+        where edge_id >= lower_bound
+        and edge_id <  upper_bound
+        group by v2e.edge_id, rn.geom
+        )
+    ,   neighbour_data as (
+        select jd.edge_id
+             , st_collect(jd.split_junctions, rn.geom) as split_junctions
+          from junction_data jd
+          left join pgnetworks_staging.road_network rn 
+            on jd.orig_geom && rn.geom
+        )
+    insert into junctioned_edges 
+    (edge_id, orig_geom, orig_points_count, union_junctions, split_junctions, required_points)
+    select jd.edge_id
+         , jd.orig_geom
+         , jd.orig_points_count
+         , jd.union_junctions
+         , nd.split_junctions
+         , jd.required_points
+      from junction_data jd
+      join neighbour_data nd on jd.edge_id = nd.edge_id
     ;
     select into item_count count(*) from junctioned_edges;
     /*
