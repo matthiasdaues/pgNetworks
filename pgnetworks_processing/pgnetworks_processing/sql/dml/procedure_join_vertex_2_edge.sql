@@ -57,9 +57,15 @@ begin
             buffer_distance := buffer_distance * 5;
             end;
         end loop;
-        -- calculate the closest point id
+        -- calculate the closest point
         with closest_point as (
-            select st_closestpoint(closest.edge_geom,vertex_geom) as closest_point_geom
+            select st_lineInterpolatePoint(
+                closest.edge_geom, 
+                st_lineLocatePoint(
+                    closest.edge_geom, 
+                    vertex_geom
+                )
+            ) as closest_point_geom      
         )
         , edge_dump_array as (
             select array_agg(ed.edge_dump) as edge_dump_array 
@@ -71,13 +77,21 @@ begin
                vertex_id
              , closest.edge_id 
              , public.ghh_encode_xy_to_id(st_x(cp.closest_point_geom)::numeric(10,7),st_y(cp.closest_point_geom)::numeric(10,7)) as closest_point_id
-             , cp.closest_point_geom
+             , st_reducePrecision(st_makeline(vertex_geom, cp.closest_point_geom), 0.0000001) as junction_geom
+             , st_lineInterpolatePoint(st_makeline(vertex_geom, cp.closest_point_geom), 0.5) as junction_center
              , case when cp.closest_point_geom = ANY(eda.edge_dump_array) then false else true end as new_point
           from closest_point cp, edge_dump_array eda;
-    execute format('insert into pgnetworks_staging.vertex_2_edge (vertex_id, closest_point_id, closest_point_geom, edge_id, new_point) values ($1, $2, $3, $4, $5)')
-    using access.vertex_id, access.closest_point_id, access.closest_point_geom, access.edge_id, access.new_point; 
-    execute format('insert into pgnetworks_staging.segments (edge_id, edge_type, node_1, node_2, geom) values ($1, $2, $3, $4, $5)')
-    using -1, 'junction'::pgnetworks_staging.edge_type, access.closest_point_id, access.vertex_id, st_makeline(vertex_geom, access.closest_point_geom); 
+    execute format('insert into pgnetworks_staging.segments (edge_id, source_edge_id, edge_type, node_1, node_2, geom) values ($1, $2, $3, $4, $5, $6)')
+    using ghh_encode_xy_to_id(
+                st_x(access.junction_center)::numeric, 
+                st_y(access.junction_center)::numeric
+              ) as edge_id
+        , access.edge_id
+        , 'network_to_vertex'::pgnetworks_staging.edge_type
+        , access.closest_point_id
+        , access.vertex_id
+        , access.junction_geom
+    ; 
     end loop;
     -- close batch processing
 end 

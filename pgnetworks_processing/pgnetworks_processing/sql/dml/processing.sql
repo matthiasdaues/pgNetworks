@@ -60,16 +60,15 @@ select item_count
 ;
 
 
--- name: find_bounds_in_vertex_2_edge
--- DONE: Muss die Bounds über die distinkten edge_id's erzeugen, um Dopplungen beim Prozessieren zu vermeiden.
+-- name: find_bounds_in_segment_junctions
 with edge_ids as (
-    select distinct(edge_id)
-      from pgnetworks_staging.vertex_2_edge
-     order by edge_id
+    select distinct(source_edge_id)
+      from pgnetworks_staging.segments
+     order by source_edge_id
     )
 ,   ordered_rows as (
-    select edge_id as id
-         , row_number() over (order by edge_id asc) as rn
+    select source_edge_id as id
+         , row_number() over (order by source_edge_id asc) as rn
       from edge_ids
      order by id
     )
