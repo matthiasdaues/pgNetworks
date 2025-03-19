@@ -59,30 +59,12 @@ begin
         end loop;
         -- calculate the closest point
         with closest_point as (
-            select st_intersection(
-                st_makeline(
-                    vertex_geom,
-                    st_translate(
-                        vertex_geom,
-                        sin(
-                            st_azimuth(
-                                st_closestpoint(
-                                    closest.edge_geom,vertex_geom
-                                    ),
-                                vertex_geom
-                            )
-                        ) * (st_distance(vertex_geom, st_closestpoint(closest.edge_geom,vertex_geom)*2), 
-                        cos(
-                            ST_AZIMUTH(
-                                st_closestpoint(
-                                    closest.edge_geom,vertex_geom
-                                    ),
-                                vertex_geom
-                            )
-                        ) * (st_distance(vertex_geom, st_closestpoint(closest.edge_geom,vertex_geom)*2)
-                    )
-                ),
-                closest.edge_geom
+            select st_lineInterpolatePoint(
+                closest.edge_geom, 
+                st_line_locate_point(
+                    closest.edge_geom, 
+                    vertex_geom
+                )
             ) as closest_point      
         )
         , edge_dump_array as (
