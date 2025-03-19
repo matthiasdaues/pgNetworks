@@ -36,23 +36,34 @@ begin
     with junction_data as (
         select v2e.edge_id
             , rn.geom as orig_geom
+            , coalesce(rn.properties->>'layer', 'n') as orig_layer
             , st_numpoints(rn.geom) as orig_points_count
             , st_collect(distinct(closest_point_geom)) filter (where v2e.new_point) as union_junctions
-            , st_collect(distinct(closest_point_geom)) as split_junctions
+            , st_collect(distinct(st_makeline(closest_point_geom, ghh_decode_id_to_wkt(vertex_id)::geometry(point,4326)))) as split_junctions
             , count(distinct closest_point_geom) filter (where v2e.new_point) as required_points
         from pgnetworks_staging.vertex_2_edge v2e
         left join pgnetworks_staging.road_network rn on rn.id = v2e.edge_id
         where edge_id >= lower_bound
         and edge_id <  upper_bound
-        group by v2e.edge_id, rn.geom
+        group by v2e.edge_id, rn.geom, rn.properties
         )
     ,   neighbour_data as (
         select jd.edge_id
-             , st_collect(jd.split_junctions, rn.geom) as split_junctions
+             , st_union(jd.split_junctions,rn.geom) as split_junctions
           from junction_data jd
           left join pgnetworks_staging.road_network rn 
             on jd.orig_geom && rn.geom
+           and jd.edge_id != rn.id
+           and jd.orig_layer = coalesce(rn.properties->>'layer', 'n')           
+           and st_dimension(ST_Intersection(jd.orig_geom, rn.geom)) = 0 
         )
+    -- ,   neighbour_data_refined as (
+    --     select jd.edge_id
+    --          , ndr.geom
+    --       from neighbour_data_rough
+    --      where st_intersects(ndr.geom)
+    --       left join
+    --     )
     insert into junctioned_edges 
     (edge_id, orig_geom, orig_points_count, union_junctions, split_junctions, required_points)
     select jd.edge_id
