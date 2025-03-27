@@ -3,12 +3,9 @@
 
 -- name: create_table_vertex_2_edge#
 create table pgnetworks_staging.vertex_2_edge (
-    id bigserial primary key,
-    vertex_id bigint not null,
-    closest_point_id bigint not null,
-    closest_point_geom geometry(point,4326),
-    edge_id bigint not null,
-    new_point boolean
+    vertex_id bigint,
+    edge_id bigint,
+    fraction float
 );
 
 -- name: create_index_vertex_2_edge_edge_id_idx#

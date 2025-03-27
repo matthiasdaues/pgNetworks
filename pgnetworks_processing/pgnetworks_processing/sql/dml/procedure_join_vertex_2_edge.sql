@@ -6,94 +6,50 @@ create or replace procedure pgnetworks_staging.join_vertex_2_edge(in lower_bound
 language plpgsql
 as $procedure$
 --do $$
-declare
-    -- process variables
-    vertex_id_array bigint[];
-    vertex_id bigint;  
-    vertex_geom geometry(point,4326);
-    buffer_distance int;
-    buffer_geom geometry(polygon,4326);
-    closest record;
-    -- result variables
-    access record;
 begin
-    -- begin batch processing
-    -- collect the id-array specified by lower and upper bound
-    with id_list as (
-        select location_id
-          from pgnetworks_staging.terminals
-         where location_id >= lower_bound
-           and location_id < upper_bound 
-         order by location_id asc
-    )
-    select into vertex_id_array
-           array_agg(location_id)
-      from id_list
-     ;
-    item_count := array_length(vertex_id_array, 1);
-    -- loop through the id array
-    foreach vertex_id in array vertex_id_array
-    loop
-        -- create vertex_geom
-        vertex_geom := st_setsrid(public.ghh_decode_id_to_wkt(vertex_id)::geometry, 4326);
-        -- find the closest edge by looping through increasing buffer distances
-        -- to accomodate for vertices further away from the nearest edge
-        buffer_distance := 100;
-        loop 
-            begin       
-            buffer_geom := st_buffer(vertex_geom::geography, buffer_distance)::geometry;
-            select into closest
-                   r.id as edge_id
-                 , r.geom as edge_geom
-              from pgnetworks_staging.road_network r
-             where buffer_geom && r.geom
-             order by vertex_geom <-> r.geom
-             limit 1;
-            -- assign edge_id und edge_geom to variable
-            if 
-                closest.edge_id is not null then exit;
-            end if;
-            -- maybe limit the buffer distance
-            buffer_distance := buffer_distance * 5;
-            end;
-        end loop;
-        -- calculate the closest point
-        with closest_point as (
-            select st_lineInterpolatePoint(
-                closest.edge_geom, 
-                st_lineLocatePoint(
-                    closest.edge_geom, 
-                    vertex_geom
-                )
-            ) as closest_point_geom      
+
+    -- simple statement to find the nearest neighbour edge for each vertex
+    with vt as (
+        select location_id as vertex_id
+            , geom as vertex_geom
+        from pgnetworks_staging.terminals
+        where location_id >= 2595910006465660600
+        and location_id <  2595977728678422864
         )
-        , edge_dump_array as (
-            select array_agg(ed.edge_dump) as edge_dump_array 
-              from (
-                select (st_dumppoints(closest.edge_geom)).geom as edge_dump
-                ) ed
+    ,   buffer as (
+        select vertex_id
+            , vertex_geom
+            , st_buffer(vertex_geom::geography, 150)::geometry as buffer 
+        from vt
         )
-        select into access
-               vertex_id
-             , closest.edge_id 
-             , public.ghh_encode_xy_to_id(st_x(cp.closest_point_geom)::numeric(10,7),st_y(cp.closest_point_geom)::numeric(10,7)) as closest_point_id
-             , st_reducePrecision(st_makeline(vertex_geom, cp.closest_point_geom), 0.0000001) as junction_geom
-             , st_lineInterpolatePoint(st_makeline(vertex_geom, cp.closest_point_geom), 0.5) as junction_center
-             , case when cp.closest_point_geom = ANY(eda.edge_dump_array) then false else true end as new_point
-          from closest_point cp, edge_dump_array eda;
-    execute format('insert into pgnetworks_staging.segments (edge_id, source_edge_id, edge_type, node_1, node_2, geom) values ($1, $2, $3, $4, $5, $6)')
-    using ghh_encode_xy_to_id(
-                st_x(access.junction_center)::numeric, 
-                st_y(access.junction_center)::numeric
-              ) as edge_id
-        , access.edge_id
-        , 'network_to_vertex'::pgnetworks_staging.edge_type
-        , access.closest_point_id
-        , access.vertex_id
-        , access.junction_geom
-    ; 
-    end loop;
-    -- close batch processing
+    ,   closest_edge_candidates as (
+        select distinct on (vertex_id)
+            b.vertex_id
+            , r.id as edge_id
+            , r.geom as edge_geom
+            , vertex_geom
+            , row_number() over (partition by vertex_id order by vertex_geom <-> r.geom) as row_num
+        from pgnetworks_staging.road_network r
+            , buffer b
+        where r.geom && b.buffer
+        )
+    ,   closest_edge as (
+        select vertex_id
+            , edge_id
+            , st_linelocatepoint(edge_geom, vertex_geom) as fraction
+        from closest_edge_candidates
+        where row_num = 1
+        )
+    insert into pgnetworks_staging.vertex_2_edge
+    (vertex_id, edge_id, fraction)
+    select vertex_id
+        , edge_id
+        , fraction
+    from closest_edge
+    ;
+
+    -- get the  number of processed points
+    get diagnostics item_count = row_count;
 end 
 $procedure$;
 
